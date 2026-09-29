@@ -182,6 +182,13 @@ function alerts(state, circleId, userId, role) {
       out.push({ kind: 'money', level: 'info', text: `You owe ${b.toName} S$${b.amount.toFixed(2)}`, tab: 'costs' });
     }
   }
+  for (const p of (state.payments || []).filter((x) => x.circleId === circleId && x.status === 'due' && x.fromId === userId)) {
+    const to = p.toId === 'person' ? (circle ? circle.parentName : 'Parent') : userName(state, p.toId);
+    out.push({ kind: 'payment', level: p.dueOn < todaySG() ? 'high' : 'info', text: `Pay ${to} S$${p.amount.toFixed(2)}${p.reason ? ` for ${p.reason}` : ''} (PayNow or PayLah!)`, tab: 'payments' });
+  }
+  for (const p of (state.payments || []).filter((x) => x.circleId === circleId && x.status === 'paid' && x.toId === userId)) {
+    out.push({ kind: 'payment', level: 'info', text: `${userName(state, p.fromId)} says they paid you S$${p.amount.toFixed(2)}. Tap to confirm.`, tab: 'payments' });
+  }
   const order = { urgent: 0, high: 1, info: 2 };
   return out.sort((a, b) => order[a.level] - order[b.level]);
 }

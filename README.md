@@ -1,9 +1,26 @@
-# Famhub web prototype (version 4.7)
+# Famhub web prototype (version 4.8)
 
 Famhub is the family eldercare coordination app.
 
 Open this folder in VS Code and follow "Famhub: Web Prototype Deployment Guide".
 No commands to type.
+
+## New in 4.8: payments with PayNow and PayLah!
+
+- More > Payments, in every tab (Parents, Infants, Kids, Teens). Famhub never holds money: it shows the
+  PayNow QR code of the person being paid, which PayLah! and every Singapore banking app can scan, and keeps
+  a record of who paid whom.
+- Request money: anyone (including the helper) can ask a member to pay them back, or ask for pocket money.
+  The person asked can pay, or decline with a note. The requester can send a reminder (once an hour).
+- Pay the helper (owner and family): salary, top-up, reimbursement or bonus, once or every week or month.
+  "Also add to shared costs" puts the payment into Costs, split equally among the family.
+- Allowance (owner and family): monthly allowance for a parent, weekly pocket money for a kid or teen.
+  The child does not need an account; save the child's PayNow / PayLah! mobile on the Payments page.
+- Paying: "Pay with PayNow or PayLah!" shows the QR code, a button to save it as an image (to scan from the
+  gallery on the same phone), and the mobile number, amount and reference to copy. Then "I have paid"
+  (PayNow, PayLah!, bank transfer or cash). The person paid taps "Got it" when the money arrives.
+- Repeating payments are created on their day and the payer is reminded; pause or stop them any time.
+- Today shows payments waiting for you. Costs > Settle up also says "Pay with PayNow or PayLah!".
 
 ## New in 4.7: infant reports and automatic nutrition targets
 

@@ -13,6 +13,7 @@ import UpdatesScreen from './src/screens/UpdatesScreen';
 import MoreScreen from './src/screens/MoreScreen';
 import InboxScreen, { CATEGORY_ICON } from './src/screens/InboxScreen';
 import NotifySettingsScreen from './src/screens/NotifySettingsScreen';
+import PaymentsScreen from './src/screens/PaymentsScreen';
 import CostsScreen from './src/screens/CostsScreen';
 import DocumentsScreen from './src/screens/DocumentsScreen';
 import RenewalsScreen from './src/screens/RenewalsScreen';
@@ -44,7 +45,7 @@ const NAV: { key: string; label: string; icon: IconName; iconOn: IconName }[] = 
   { key: 'updates', label: 'Updates', icon: 'chatbubbles-outline', iconOn: 'chatbubbles' },
   { key: 'more', label: 'More', icon: 'grid-outline', iconOn: 'grid' },
 ];
-const SUB_TITLES: Record<string, string> = { appearance: 'Appearance', visits: 'Visit notes', repeats: 'Repeating items', costs: 'Costs', docs: 'Documents', renewals: 'Renewals', circle: 'Circle and people', activity: 'Activity log', me: 'My profile' };
+const SUB_TITLES: Record<string, string> = { appearance: 'Appearance', visits: 'Visit notes', repeats: 'Repeating items', costs: 'Costs', payments: 'Payments', docs: 'Documents', renewals: 'Renewals', circle: 'Circle and people', activity: 'Activity log', me: 'My profile' };
 
 // Test mode: act as any demo person to try each role.
 // Shows a system notification from the open app when alerts are allowed, so an urgent alert
@@ -383,12 +384,12 @@ export default function App() {
       <PageHeader title={title} />
     </View>
   );
-  const allowed = new Set(['home', 'calendar', 'care', 'requests', 'updates', 'more', 'inbox', 'notify', 'docs', 'circle', 'activity', 'me', 'repeats', 'visits', 'launch', 'profile', 'appearance', ...(data.baby ? ['babyreport'] : []), ...(data.can.seeMoney ? ['costs'] : []), ...(data.can.seeRenewals ? ['renewals'] : [])]);
+  const allowed = new Set(['home', 'calendar', 'care', 'requests', 'updates', 'more', 'inbox', 'notify', 'docs', 'circle', 'activity', 'me', 'repeats', 'visits', 'launch', 'profile', 'appearance', 'payments', ...(data.baby ? ['babyreport'] : []), ...(data.can.seeMoney ? ['costs'] : []), ...(data.can.seeRenewals ? ['renewals'] : [])]);
   const current = allowed.has(tab) ? tab : 'home';
   const screens: Record<string, React.ReactNode> = {
     home: <TodayScreen {...props} />, calendar: <CalendarScreen {...props} />, care: data.baby ? <BabyScreen {...props} /> : <CareScreen {...props} />, requests: <RequestsScreen {...props} />,
     updates: <UpdatesScreen {...props} />, more: <MoreScreen {...props} />, inbox: inboxScreen, notify: <NotifySettingsScreen onPushChange={setPushOn} />,
-    costs: <CostsScreen {...props} />, docs: <DocumentsScreen {...props} />, renewals: <RenewalsScreen {...props} />, circle: <CircleScreen key={cid} {...props} />,
+    costs: <CostsScreen {...props} />, payments: <PaymentsScreen {...props} />, docs: <DocumentsScreen {...props} />, renewals: <RenewalsScreen {...props} />, circle: <CircleScreen key={cid} {...props} />,
     activity: <ActivityScreen {...props} />, me: <MeScreen {...props} />, repeats: <RepeatsScreen {...props} />, visits: <VisitsScreen {...props} />,
     appearance: <AppearanceSettings />,
     babyreport: data.baby ? <BabyReportScreen {...props} /> : null,

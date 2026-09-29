@@ -109,6 +109,7 @@ export default function TodayScreen(props: ScreenProps) {
   const latest = data.notes[0];
   const owe = (data.balances || []).filter((b) => b.fromUserId === me);
   const owed = (data.balances || []).filter((b) => b.toUserId === me);
+  const payAlerts = (data.alerts || []).filter((a) => a.kind === 'payment');
 
   return (
     <View style={{ gap: 18 }}>
@@ -239,6 +240,17 @@ export default function TodayScreen(props: ScreenProps) {
           <View style={{ flex: 1 }}>
             {owe.map((b) => <Text key={b.toUserId} style={{ fontSize: 16 }}>You owe <Text style={{ fontWeight: '700', color: personColor(b.toUserId) }}>{b.toName}</Text> {sgd(b.amount)}</Text>)}
             {owed.map((b) => <Text key={b.fromUserId} style={{ fontSize: 16 }}><Text style={{ fontWeight: '700', color: personColor(b.fromUserId) }}>{b.fromName}</Text> owes you {sgd(b.amount)}</Text>)}
+          </View>
+          <Icon name="chevron-forward" size={18} color={colors.faint} />
+        </Card>
+      )}
+
+      {payAlerts.length > 0 && (
+        <Card onPress={() => go('payments')} style={{ flexDirection: 'row', alignItems: 'center', gap: 12 }}>
+          <View style={{ width: 40, height: 40, borderRadius: 12, backgroundColor: '#7C1A7822', alignItems: 'center', justifyContent: 'center' }}><Icon name="qr-code-outline" size={22} color="#7C1A78" /></View>
+          <View style={{ flex: 1, gap: 2 }}>
+            {payAlerts.slice(0, 3).map((a, i) => <Text key={i} style={{ fontSize: 15, color: a.level === 'high' ? colors.danger : colors.text }}>{a.text}</Text>)}
+            {payAlerts.length > 3 && <Muted>and {payAlerts.length - 3} more</Muted>}
           </View>
           <Icon name="chevron-forward" size={18} color={colors.faint} />
         </Card>

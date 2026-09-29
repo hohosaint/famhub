@@ -22,7 +22,7 @@ export default function MeScreen({ data, refresh }: ScreenProps) {
         <Muted>Your role in {data.circle.name}: {roleLabel[data.role]}</Muted>
         <Field label="Your name as others see it" value={name} onChange={setName} />
         {data.role !== 'parent' && data.role !== 'helper' && (
-          <Field label="Your PayNow mobile (so others can pay you back)" value={paynow} onChange={setPaynow} placeholder="9123 4567" keyboard="phone-pad" />
+          <Field label="Your PayNow / PayLah! mobile (so others can pay you by QR code)" value={paynow} onChange={setPaynow} placeholder="9123 4567" keyboard="phone-pad" />
         )}
         <ErrorText message={error} />
         {saved && <Muted>Saved.</Muted>}

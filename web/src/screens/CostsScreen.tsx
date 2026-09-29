@@ -110,7 +110,7 @@ export default function CostsScreen({ data, cid, refresh }: ScreenProps) {
             <Text style={{ fontSize: 17 }}><Text style={{ fontWeight: '600' }}>{b.fromName}</Text> pays <Text style={{ fontWeight: '600' }}>{b.toName}</Text> {sgd(b.amount)}</Text>
             <Row>
               {b.toHasPayNow
-                ? <Button label={qrKey === keyOf(b) ? 'Hide PayNow QR' : 'Show PayNow QR'} kind="secondary" onPress={() => setQrKey(qrKey === keyOf(b) ? null : keyOf(b))} />
+                ? <Button label={qrKey === keyOf(b) ? 'Hide QR code' : 'Pay with PayNow or PayLah!'} kind="secondary" onPress={() => setQrKey(qrKey === keyOf(b) ? null : keyOf(b))} />
                 : <Muted>{b.toName} has no PayNow mobile saved yet (Me tab).</Muted>}
               <Button label="Mark as paid" kind="secondary" onPress={() => run(() => api.settle(cid, b), refresh, setError)} />
             </Row>

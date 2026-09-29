@@ -11,6 +11,7 @@ const store = require('./lib/store');
 const Seen = require('./lib/seen');
 Seen.init(store.dataDir);
 const { payNowPayload, normaliseMobile } = require('./lib/paynow');
+const PAY = require('./lib/payments');
 const A = require('./lib/auth');
 const { currentUser, testModeAllowed, DEMO_USERS } = A;
 const L = require('./lib/logic');
@@ -103,7 +104,7 @@ function find(list, id, circleId, what) {
 // ---------- session, test mode ----------
 
 // When this version was built (the web pages) and when the server started, shown in the app under the profile button.
-const APP_VERSION = '4.7';
+const APP_VERSION = '4.8';
 const STARTED_AT = new Date().toISOString();
 let BUILT_AT = '';
 try { BUILT_AT = fs.statSync(path.join(__dirname, 'public', 'index.html')).mtime.toISOString(); } catch { /* no pages yet */ }
@@ -712,7 +713,7 @@ app.patch('/api/circles/:circleId/appointments/:id', wrap(async (req, res) => {
 const presence = new Map();   // key circleId|userId|clientId -> { circleId, userId, clientId, tab, doing, typing, at, since, trail }
 const streams = new Set();    // { res, circleId, userId, clientId }
 const PRESENCE_TTL = 35000;
-const PAGES = ['home', 'calendar', 'care', 'launch', 'requests', 'updates', 'more', 'inbox', 'notify', 'costs', 'docs', 'renewals', 'circle', 'activity', 'me', 'photos', 'repeats', 'visits', 'profile', 'appearance', 'babyreport'];
+const PAGES = ['home', 'calendar', 'care', 'launch', 'requests', 'updates', 'more', 'inbox', 'notify', 'costs', 'docs', 'renewals', 'circle', 'activity', 'me', 'photos', 'repeats', 'visits', 'profile', 'appearance', 'babyreport', 'payments'];
 
 // Everyone else: never the viewer themselves, and never the viewer's own window.
 function presenceFor(state, circleId, viewerId, viewerClientId = '') {
@@ -1491,6 +1492,179 @@ app.get('/api/circles/:circleId/paynow-qr', wrap(async (req, res) => {
   res.type('image/svg+xml').set('Cache-Control', 'no-store').send(svg);
 }));
 
+// ---------- payments with PayNow or PayLah! (4.8) ----------
+
+const payWho = (state, circle, id) => (id === 'person' ? N.people(state, circle.id, ['parent']) : [id]);
+function planNotify(state) {
+  return (circle, p) => N.notify(state, { circleId: circle.id, to: p.fromId === 'person' ? [] : [p.fromId], category: 'money',
+    title: `Time to pay ${PAY.nameOf(state, circle, p.toId)} S$${p.amount.toFixed(2)}`, body: `${PAY.label(p)}. Pay with PayNow or PayLah! in Famhub.`, tab: 'payments', itemId: p.id });
+}
+
+app.get('/api/circles/:circleId/payments', wrap(async (req, res) => {
+  const v = await inCircle(req, null, ({ state, circle, userId, role }) => { PAY.runPlans(state, planNotify(state)); return PAY.view(state, circle, userId, role); });
+  res.json(v);
+}));
+
+app.post('/api/circles/:circleId/payments', wrap(async (req, res) => {
+  const out = await inCircle(req, null, ({ state, circle, userId, role, say, notify }) => {
+    PAY.ensure(state);
+    const b = req.body || {};
+    const kind = PAY.KINDS.includes(b.kind) ? b.kind : fail(400, 'Choose what kind of payment this is.');
+    const sub = PAY.SUBS[kind].includes(b.sub) ? b.sub : 'other';
+    const amount = money(b.amount);
+    if (!(amount > 0 && amount < 100000)) fail(400, 'Enter an amount in dollars, for example 50 or 12.80.');
+    const members = state.members.filter((m) => m.circleId === circle.id);
+    const roleOf = (id) => (members.find((m) => m.userId === id) || {}).role;
+    const family = (id) => ['owner', 'family'].includes(roleOf(id));
+    const reason = text(b.reason, 80);
+    let fromId = b.fromId, toId = b.toId;
+    if (kind === 'request') {
+      toId = toId === 'person' && ['owner', 'family', 'parent'].includes(role) ? 'person' : userId;
+      if (!roleOf(fromId) || fromId === userId) fail(400, 'Choose who you are asking to pay.');
+    } else {
+      if (!L.can(role, 'editMoney')) fail(403, 'Only the owner and family can set up helper pay and allowances.');
+      fromId = family(fromId) ? fromId : userId;
+      if (kind === 'helper' && roleOf(toId) !== 'helper') fail(400, 'Choose the helper to pay. Add the helper to the circle first (Circle and people).');
+      if (kind === 'allowance' && toId !== 'person' && !roleOf(toId)) fail(400, 'Choose who gets the allowance.');
+      if (toId === fromId) fail(400, 'The person paying and the person paid must be different.');
+    }
+    const dueOn = isDay(b.dueOn) ? b.dueOn : PAY.sgToday();
+    const addToCosts = kind !== 'request' && !!b.addToCosts;
+    const repeat = b.repeat && ['week', 'month'].includes(b.repeat.every) && kind !== 'request' ? b.repeat : null;
+    let plan = null;
+    if (repeat) {
+      const day = repeat.every === 'week' ? Math.max(0, Math.min(6, Number(repeat.day) || 0)) : Math.max(1, Math.min(31, Number(repeat.day) || 1));
+      plan = { id: randomUUID(), circleId: circle.id, kind, sub, fromId, toId, amount, reason, every: repeat.every, day, startOn: dueOn, lastOn: '', active: true, addToCosts, createdBy: userId, createdAt: new Date().toISOString() };
+      state.payPlans.push(plan);
+    }
+    let p = null;
+    if (!plan || PAY.nextDue(plan, dueOn) <= PAY.sgToday()) {
+      p = PAY.makePayment(state, circle, { kind, sub, fromId, toId, amount, reason, dueOn, addToCosts, planId: plan ? plan.id : '' }, userId);
+      if (plan) plan.lastOn = PAY.nextDue(plan, dueOn);
+    }
+    const toName = PAY.nameOf(state, circle, toId), fromName = PAY.nameOf(state, circle, fromId);
+    const what = PAY.label({ kind, sub, reason });
+    say(kind === 'request' ? `asked ${fromName} for S$${amount.toFixed(2)} (${what})` : `set up ${what} of S$${amount.toFixed(2)} from ${fromName} to ${toName}${plan ? `, every ${plan.every}` : ''}`);
+    if (p && fromId !== userId) notify({ to: [fromId], category: 'money', title: kind === 'request' ? `${L.userName(state, userId)} asked you for S$${amount.toFixed(2)}` : `Please pay ${toName} S$${amount.toFixed(2)}`, body: `${what}. Pay with PayNow or PayLah! in Famhub.`, tab: 'payments', itemId: p.id });
+    return { payment: p, plan };
+  });
+  res.status(201).json(out);
+}));
+
+function payAction(action) {
+  return wrap(async (req, res) => {
+    const out = await inCircle(req, null, ({ state, circle, userId, role, say, notify }) => {
+      PAY.ensure(state);
+      const p = find(state.payments, req.params.id, circle.id, 'Payment');
+      if (!PAY.visible(p, userId, role)) fail(404, 'Payment not found.');
+      const toName = PAY.nameOf(state, circle, p.toId), fromName = PAY.nameOf(state, circle, p.fromId);
+      const amt = `S$${p.amount.toFixed(2)}`;
+      if (action === 'paid') {
+        if (p.status !== 'due' || !PAY.isPayer(p, userId, role)) fail(400, 'This payment cannot be marked as paid.');
+        p.status = 'paid'; p.method = PAY.METHODS.includes(req.body.method) ? req.body.method : 'paynow'; p.paidAt = new Date().toISOString(); p.paidBy = userId;
+        if (p.toId === 'person' && !N.people(state, circle.id, ['parent']).length) { p.status = 'received'; p.receivedAt = p.paidAt; }
+        if (p.addToCosts) {
+          const fam = state.members.filter((m) => m.circleId === circle.id && ['owner', 'family'].includes(m.role)).map((m) => m.userId);
+          const shares = Object.fromEntries(fam.map((u) => [u, 1]));
+          if (fam.length && p.fromId !== 'person') {
+            state.expenses.push({ id: randomUUID(), circleId: circle.id, item: `${PAY.label(p)} (${toName})`, category: p.kind === 'helper' ? 'helper' : 'other', amount: p.amount, paidByUserId: p.fromId, spentOn: PAY.sgToday(), splitMode: 'equal', shares, receiptFileId: '', settlement: false, paymentId: p.id, createdBy: userId, createdAt: new Date().toISOString() });
+          }
+        }
+        say(`paid ${toName} ${amt} by ${PAY.METHOD_LABEL[p.method]} (${PAY.label(p)})`);
+        notify({ to: payWho(state, circle, p.toId), category: 'money', title: `${fromName} paid you ${amt} by ${PAY.METHOD_LABEL[p.method]}`, body: `${PAY.label(p)}. Reference ${p.ref}. Tap "Got it" once you see it in your account.`, tab: 'payments', itemId: p.id });
+      } else if (action === 'received') {
+        if (p.status !== 'paid' || !PAY.isPayee(p, userId, role)) fail(400, 'Only the person paid can confirm this.');
+        p.status = 'received'; p.receivedAt = new Date().toISOString();
+        say(`confirmed receiving ${amt} from ${fromName}`);
+        notify({ to: [p.fromId], category: 'money', title: `${toName} received your ${amt}`, body: PAY.label(p), tab: 'payments', itemId: p.id });
+      } else if (action === 'decline') {
+        if (p.status !== 'due' || p.kind !== 'request' || p.fromId !== userId) fail(400, 'Only the person asked can decline a request.');
+        p.status = 'declined'; p.declinedAt = new Date().toISOString(); p.declineNote = text(req.body.note, 120);
+        say(`declined ${toName}'s request for ${amt}`);
+        notify({ to: payWho(state, circle, p.toId), category: 'money', title: `${fromName} declined your request for ${amt}`, body: p.declineNote || PAY.label(p), tab: 'payments', itemId: p.id });
+      } else if (action === 'cancel') {
+        if (p.status !== 'due' || !(p.createdBy === userId || role === 'owner')) fail(400, 'This payment cannot be cancelled.');
+        p.status = 'cancelled';
+        say(`cancelled the payment ${PAY.label(p)} (${amt})`);
+      } else if (action === 'remind') {
+        if (p.status !== 'due') fail(400, 'This payment is not waiting.');
+        if (p.remindedAt && Date.now() - new Date(p.remindedAt).getTime() < 3600e3) fail(429, 'A reminder was sent less than an hour ago.');
+        p.remindedAt = new Date().toISOString();
+        notify({ to: [p.fromId], category: 'money', title: `Reminder: pay ${toName} ${amt}`, body: `${PAY.label(p)}. Pay with PayNow or PayLah! in Famhub.`, tab: 'payments', itemId: p.id });
+      }
+      return p;
+    });
+    res.json(out);
+  });
+}
+for (const a of ['paid', 'received', 'decline', 'cancel', 'remind']) app.post(`/api/circles/:circleId/payments/:id/${a}`, payAction(a));
+
+app.patch('/api/circles/:circleId/payplans/:id', wrap(async (req, res) => {
+  const out = await inCircle(req, 'editMoney', ({ state, circle, say }) => {
+    PAY.ensure(state);
+    const plan = find(state.payPlans, req.params.id, circle.id, 'Repeating payment');
+    if (req.body.active !== undefined) plan.active = !!req.body.active;
+    if (req.body.amount !== undefined) { const a = money(req.body.amount); if (!(a > 0 && a < 100000)) fail(400, 'Enter a valid amount.'); plan.amount = a; }
+    say(`${plan.active ? 'updated' : 'paused'} the repeating payment ${PAY.label(plan)}`);
+    return plan;
+  });
+  res.json(out);
+}));
+
+app.delete('/api/circles/:circleId/payplans/:id', wrap(async (req, res) => {
+  await inCircle(req, 'editMoney', ({ state, circle, say }) => {
+    PAY.ensure(state);
+    const plan = find(state.payPlans, req.params.id, circle.id, 'Repeating payment');
+    state.payPlans = state.payPlans.filter((x) => x !== plan);
+    say(`stopped the repeating payment ${PAY.label(plan)}`);
+  });
+  res.status(204).end();
+}));
+
+// The PayNow mobile of the person the circle is for (a kid, teen or parent without their own account).
+app.put('/api/circles/:circleId/person-paynow', wrap(async (req, res) => {
+  const out = await inCircle(req, null, ({ circle, role, say }) => {
+    if (!['owner', 'family', 'parent'].includes(role)) fail(403, 'Only the owner, family or the person themselves can change this.');
+    const raw = text(req.body.paynow, 20);
+    const m = raw ? normaliseMobile(raw) : '';
+    if (raw && !m) fail(400, 'PayNow mobile must be a Singapore mobile number, for example 9123 4567.');
+    circle.personPaynow = m;
+    say(m ? `saved ${circle.parentName}'s PayNow mobile` : `removed ${circle.parentName}'s PayNow mobile`);
+    return { paynow: m };
+  });
+  res.json(out);
+}));
+
+// PayNow QR for one payment. PayLah! and all Singapore banking apps scan it. format=png for saving to the phone's photos.
+app.get('/api/circles/:circleId/payments/:id/qr', wrap(async (req, res) => {
+  const info = await inCircle(req, null, ({ state, circle, userId, role }) => {
+    PAY.ensure(state);
+    const p = find(state.payments, req.params.id, circle.id, 'Payment');
+    if (!PAY.visible(p, userId, role)) fail(404, 'Payment not found.');
+    return { p, mobile: PAY.payNowOf(state, circle, p.toId), name: PAY.nameOf(state, circle, p.toId) };
+  });
+  if (!info.mobile) fail(404, `${info.name} has not saved a PayNow mobile yet.`);
+  const payload = payNowPayload({ mobile: info.mobile, amount: info.p.amount, name: info.name, reference: info.p.ref });
+  if (req.query.format === 'png') {
+    const png = await QRCode.toBuffer(payload, { type: 'png', errorCorrectionLevel: 'M', margin: 3, width: 600 });
+    res.type('image/png').set('Cache-Control', 'no-store').set('Content-Disposition', `${req.query.download ? 'attachment' : 'inline'}; filename="paynow-${info.p.ref}.png"`).send(png);
+    return;
+  }
+  const svg = await QRCode.toString(payload, { type: 'svg', errorCorrectionLevel: 'M', margin: 2, width: 260 });
+  res.type('image/svg+xml').set('Cache-Control', 'no-store').send(svg);
+}));
+
+// The payee's PayNow mobile, shown to the payer to copy into PayLah! or a bank app ("pay to mobile").
+app.get('/api/circles/:circleId/payments/:id/details', wrap(async (req, res) => {
+  const out = await inCircle(req, null, ({ state, circle, userId, role }) => {
+    PAY.ensure(state);
+    const p = find(state.payments, req.params.id, circle.id, 'Payment');
+    if (!PAY.visible(p, userId, role) || !(p.status === 'due' && PAY.isPayer(p, userId, role))) fail(404, 'Payment not found.');
+    return { mobile: PAY.payNowOf(state, circle, p.toId), name: PAY.nameOf(state, circle, p.toId), amount: p.amount, ref: p.ref };
+  });
+  res.json(out);
+}));
+
 // ---------- files, documents ----------
 
 const FILE_TYPES = { 'image/jpeg': '.jpg', 'image/png': '.png', 'image/webp': '.webp', 'image/heic': '.heic', 'application/pdf': '.pdf' };
@@ -1922,7 +2096,7 @@ app.use((err, req, res, next) => {
 });
 
 // Reminders and escalations run every minute.
-setInterval(() => { store.update((state) => N.runSchedule(state)).catch((e) => console.error('schedule', e)); }, 60000);
+setInterval(() => { store.update((state) => { PAY.runPlans(state, planNotify(state)); return N.runSchedule(state); }).catch((e) => console.error('schedule', e)); }, 60000);
 setTimeout(() => { store.update((state) => N.runSchedule(state)).catch((e) => console.error('schedule', e)); }, 3000);
 
 const port = process.env.PORT || 8080;

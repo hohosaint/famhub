@@ -8,7 +8,7 @@ const DEMO_USERS = [
   { id: 'demo-thomas', username: 'thomas', name: 'Thomas', paynow: '+6591110001', role: 'owner', label: 'Thomas (owner, son)' },
   { id: 'demo-meiling', username: 'meiling', name: 'Mei Ling', paynow: '+6591110002', role: 'family', label: 'Mei Ling (family, daughter)' },
   { id: 'demo-weijie', username: 'weijie', name: 'Wei Jie', paynow: '+6591110003', role: 'family', label: 'Wei Jie (family, son)' },
-  { id: 'demo-siti', username: 'siti', name: 'Siti', paynow: '', role: 'helper', label: 'Siti (helper)' },
+  { id: 'demo-siti', username: 'siti', name: 'Siti', paynow: '+6591110004', role: 'helper', label: 'Siti (helper)' },
   { id: 'demo-mum', username: 'mum', name: 'Mum', paynow: '', role: 'parent', label: 'Mum (parent)' },
 ];
 
@@ -24,7 +24,7 @@ function emptyState() {
     version: STATE_VERSION,
     users: [], circles: [], members: [], invites: [],
     appointments: [], tasks: [], notes: [], expenses: [], documents: [], files: [],
-    medications: [], doseLogs: [], renewals: [], checkins: [], activity: [], reads: {}, visits: [], babyLogs: [],
+    medications: [], doseLogs: [], renewals: [], checkins: [], activity: [], reads: {}, visits: [], babyLogs: [], payments: [], payPlans: [],
     notifications: [], prefs: {}, pushSubs: [], sentKeys: {},
   };
 }
@@ -117,6 +117,8 @@ function addDemoCircle(state, ownerId, ownerName) {
 function migrate(state) {
   if (!Array.isArray(state.visits)) state.visits = [];   // visit notes (added in 3.10)
   if (!Array.isArray(state.babyLogs)) state.babyLogs = []; // baby log (added in 4.0)
+  if (!Array.isArray(state.payments)) state.payments = []; // PayNow and PayLah! payments (added in 4.8)
+  if (!Array.isArray(state.payPlans)) state.payPlans = [];
   if (state.version === 2) {
     Object.assign(state, { notifications: [], prefs: {}, pushSubs: [], sentKeys: {} }, {
       notifications: state.notifications || [], prefs: state.prefs || {}, pushSubs: state.pushSubs || [], sentKeys: state.sentKeys || {},
@@ -191,6 +193,51 @@ function addDemoKidCircles(state) {
     ['demo-meiling', 'Ryan scored in the friendly match today. Home by 6.30 pm.']);
 }
 
+// Sample payments with PayNow and PayLah! (4.8): helper pay, allowances and money requests.
+function addDemoPayments(state) {
+  const now = new Date().toISOString();
+  const byName = (n) => state.circles.find((c) => c.demo && c.parentName === n);
+  const plans = [];
+  const pay = (c, kind, sub, fromId, toId, amount, reason, day, status, extra = {}) => state.payments.push({
+    id: randomUUID(), circleId: c.id, kind, sub, fromId, toId, amount, reason, dueOn: sgDay(day), status,
+    method: status === 'due' ? '' : extra.method || 'paynow', paidAt: status === 'due' ? '' : sgIso(day, 20), paidBy: status === 'due' ? '' : fromId,
+    receivedAt: status === 'received' ? sgIso(day, 21) : '', planId: extra.planId || '', addToCosts: !!extra.addToCosts,
+    ref: `FH${randomUUID().replace(/-/g, '').slice(0, 6).toUpperCase()}`, createdBy: extra.by || fromId, createdAt: now, remindedAt: '',
+  });
+  const PAYL = require('./payments');
+  // A repeating plan whose latest due date has passed; returns the plan and that date (days from today).
+  const plan = (c, kind, sub, fromId, toId, amount, reason, every, day) => {
+    const p = { id: randomUUID(), circleId: c.id, kind, sub, fromId, toId, amount, reason, every, day, startOn: sgDay(-60), lastOn: '', active: true, addToCosts: kind === 'helper', createdBy: 'demo-thomas', createdAt: now };
+    p.lastOn = PAYL.lastDue(p, sgDay(0));
+    p.ago = Math.round((new Date(`${p.lastOn}T12:00:00Z`) - new Date(`${sgDay(0)}T12:00:00Z`)) / 86400e3);
+    plans.push(p); return p;
+  };
+  const mum = byName('Mum');
+  if (mum) {
+    const sal = plan(mum, 'helper', 'salary', 'demo-thomas', 'demo-siti', 750, 'Monthly salary', 'month', 1);
+    pay(mum, 'helper', 'salary', 'demo-thomas', 'demo-siti', 750, 'Monthly salary', sal.ago, 'received', { planId: sal.id, addToCosts: true });
+    const parent = state.members.find((m) => m.circleId === mum.id && m.role === 'parent');
+    const al = plan(mum, 'allowance', 'monthly', 'demo-weijie', parent ? parent.userId : 'person', 300, 'For Mum', 'month', 5);
+    pay(mum, 'allowance', 'monthly', 'demo-weijie', al.toId, 300, 'For Mum', al.ago, 'received', { planId: al.id, method: 'paylah' });
+    pay(mum, 'request', 'reimburse', 'demo-meiling', 'demo-siti', 12.4, 'Grab to the polyclinic', 0, 'due', { by: 'demo-siti' });
+    pay(mum, 'request', 'share', 'demo-weijie', 'demo-thomas', 36, 'Share of the new wheelchair cushion', -1, 'paid', { by: 'demo-thomas', method: 'paylah' });
+  }
+  const chloe = byName('Chloe');
+  if (chloe) {
+    const w = plan(chloe, 'allowance', 'pocket', 'demo-meiling', 'person', 10, 'Weekly pocket money', 'week', 1);
+    pay(chloe, 'allowance', 'pocket', 'demo-meiling', 'person', 10, 'Weekly pocket money', w.ago, 'received', { planId: w.id, method: 'cash' });
+    pay(chloe, 'request', 'reimburse', 'demo-thomas', 'demo-siti', 18.9, 'Art supplies for Friday', 0, 'due', { by: 'demo-siti' });
+  }
+  const ryan = byName('Ryan');
+  if (ryan) {
+    ryan.personPaynow = '+6591110005';
+    const w = plan(ryan, 'allowance', 'pocket', 'demo-thomas', 'person', 25, 'Weekly allowance', 'week', 1);
+    pay(ryan, 'allowance', 'pocket', 'demo-thomas', 'person', 25, 'Weekly allowance', w.ago, 'received', { planId: w.id, method: 'paylah' });
+    pay(ryan, 'request', 'other', 'demo-weijie', 'person', 45, 'Geography field trip', 1, 'due', { by: 'demo-meiling' });
+  }
+  state.payPlans.push(...plans.map(({ ago, ...p }) => p));
+}
+
 function seedState() {
   const state = emptyState();
   // Live mode starts with no sample data: people register and set up their own circles.
@@ -198,6 +245,7 @@ function seedState() {
   addDemoCircle(state);
   addDemoBabyCircle(state);
   addDemoKidCircles(state);
+  addDemoPayments(state);
   return state;
 }
 

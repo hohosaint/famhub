@@ -101,7 +101,23 @@ if (typeof window !== 'undefined' && typeof window.fetch === 'function' && !(win
 }
 
 // Must match the server version (server/server.js /api/health).
-export const APP_VERSION = '4.7';
+export const APP_VERSION = '4.8';
+
+// Payments with PayNow or PayLah! (4.8)
+export type PayKind = 'request' | 'helper' | 'allowance';
+export type PayStatus = 'due' | 'paid' | 'received' | 'declined' | 'cancelled';
+export type PayMethod = 'paynow' | 'paylah' | 'bank' | 'cash';
+export type Payment = {
+  id: string; kind: PayKind; sub: string; fromId: string; toId: string; amount: number; reason: string; dueOn: string; status: PayStatus;
+  method: PayMethod | ''; paidAt: string; paidBy: string; receivedAt: string; planId: string; addToCosts: boolean; ref: string; createdBy: string; createdAt: string;
+  declineNote?: string; fromName: string; toName: string; label: string; toHasPayNow: boolean;
+  canPay: boolean; canConfirm: boolean; canDecline: boolean; canCancel: boolean; canRemind: boolean;
+};
+export type PayPlan = { id: string; kind: PayKind; sub: string; fromId: string; toId: string; amount: number; reason: string; every: 'week' | 'month'; day: number; startOn: string; lastOn: string; active: boolean; addToCosts: boolean; fromName: string; toName: string; label: string; next: string };
+export type PaymentsView = {
+  payments: Payment[]; plans: PayPlan[]; members: { id: string; name: string; role: Role; hasPayNow: boolean; placeholder: boolean }[];
+  person: { name: string; hasPayNow: boolean; paynow: string }; totals: { toPay: number; toReceive: number };
+};
 
 async function call<T>(method: string, path: string, body?: unknown): Promise<T> {
   const res = await fetch(path, {
@@ -165,6 +181,14 @@ export const api = {
   settle: (id: string, t: Transfer) => call('POST', c(id, '/settlements'), { fromUserId: t.fromUserId, toUserId: t.toUserId, amount: t.amount }),
   statement: (id: string, month: string) => call<Statement>('GET', c(id, `/statement?month=${month}`)),
   statementCsvUrl: (id: string, month: string) => authUrl(c(id, `/statement?month=${month}&format=csv`)),
+  payments: (id: string) => call<PaymentsView>('GET', c(id, '/payments')),
+  addPayment: (id: string, body: { kind: PayKind; sub: string; fromId: string; toId: string; amount: number; reason: string; dueOn: string; addToCosts?: boolean; repeat?: { every: 'week' | 'month'; day: number } | null }) => call<{ payment: Payment | null }>('POST', c(id, '/payments'), body),
+  paymentAction: (id: string, pid: string, action: 'paid' | 'received' | 'decline' | 'cancel' | 'remind', body: Record<string, unknown> = {}) => call<Payment>('POST', c(id, `/payments/${pid}/${action}`), body),
+  paymentDetails: (id: string, pid: string) => call<{ mobile: string; name: string; amount: number; ref: string }>('GET', c(id, `/payments/${pid}/details`)),
+  paymentQrUrl: (id: string, pid: string, png = false) => authUrl(c(id, `/payments/${pid}/qr${png ? '?format=png&download=1' : ''}`)),
+  updatePlan: (id: string, planId: string, body: { active?: boolean; amount?: number }) => call('PATCH', c(id, `/payplans/${planId}`), body),
+  deletePlan: (id: string, planId: string) => call('DELETE', c(id, `/payplans/${planId}`)),
+  setPersonPayNow: (id: string, paynow: string) => call<{ paynow: string }>('PUT', c(id, '/person-paynow'), { paynow }),
   payNowQrUrl: (id: string, to: string, amount: number) => authUrl(c(id, `/paynow-qr?to=${encodeURIComponent(to)}&amount=${amount.toFixed(2)}`)),
 
   upload: async (id: string, original: File) => {

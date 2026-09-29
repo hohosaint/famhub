@@ -1,6 +1,6 @@
 {
   "name": "famhub-web",
-  "version": "4.7.0",
+  "version": "4.8.0",
   "main": "index.ts",
   "dependencies": {
     "@expo/metro-runtime": "~57.0.16",
