@@ -1,4 +1,4 @@
-// Famhub web prototype 4.5: serves the web app (public/) and the API (/api/*).
+// Famhub web prototype 4.6: serves the web app (public/) and the API (/api/*).
 // Full-featured test version: roles, invites, calendar, tasks, notes, medicines,
 // costs with statements and PayNow, documents, renewals, check-ins and alerts.
 
@@ -102,9 +102,15 @@ function find(list, id, circleId, what) {
 
 // ---------- session, test mode ----------
 
+// When this version was built (the web pages) and when the server started, shown in the app under the profile button.
+const APP_VERSION = '4.6';
+const STARTED_AT = new Date().toISOString();
+let BUILT_AT = '';
+try { BUILT_AT = fs.statSync(path.join(__dirname, 'public', 'index.html')).mtime.toISOString(); } catch { /* no pages yet */ }
+
 app.get('/api/health', wrap(async (req, res) => {
   await store.read();
-  res.json({ status: 'ok', storage: store.kind.startsWith('file') ? 'file' : 'database', version: '4.5' });
+  res.json({ status: 'ok', storage: store.kind.startsWith('file') ? 'file' : 'database', version: APP_VERSION, mode: A.isLive() ? 'live' : 'test', builtAt: BUILT_AT, startedAt: STARTED_AT });
 }));
 
 app.get('/api/session', wrap(async (req, res) => {
@@ -1893,4 +1899,4 @@ setInterval(() => { store.update((state) => N.runSchedule(state)).catch((e) => c
 setTimeout(() => { store.update((state) => N.runSchedule(state)).catch((e) => console.error('schedule', e)); }, 3000);
 
 const port = process.env.PORT || 8080;
-app.listen(port, () => console.log(`Famhub prototype 4.5 running on http://localhost:${port} (storage: ${store.kind}; ${A.isLive() ? 'LIVE mode: real accounts, no test tools' : 'TEST mode'})`));
+app.listen(port, () => console.log(`Famhub ${APP_VERSION} running on http://localhost:${port} (storage: ${store.kind}; ${A.isLive() ? 'LIVE mode: real accounts, no test tools' : 'TEST mode'})`));

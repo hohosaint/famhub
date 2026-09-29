@@ -1,11 +1,18 @@
-# Famhub web prototype (version 4.5)
+# Famhub web prototype (version 4.6)
 
 Famhub is the family eldercare coordination app.
 
 Open this folder in VS Code and follow "Famhub: Web Prototype Deployment Guide".
 No commands to type.
 
-## New in 4.5: live mode (real accounts) and who is online
+## New in 4.6: version under the profile button
+
+- Top right of every page: your profile picture with the version (for example v4.6) under it. It turns
+  red when the page and the server differ. Tap it for your name and email, the page and server versions,
+  when this version was built and when the server started, plus My profile and Reload page.
+- The sign-in page shows the version at the bottom. /api/health also returns mode, builtAt and startedAt.
+
+## Added in 4.5: live mode (real accounts) and who is online
 
 - Live mode: app setting TEST_MODE = false (or not set on Azure). No TEST MODE bar, no demo people,
   no profile switching, no sample data; a fresh install starts empty. People create an account with

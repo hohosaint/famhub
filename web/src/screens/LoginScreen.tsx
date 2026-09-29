@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react';
 import { Pressable, Text, View } from 'react-native';
-import { api, AuthOptions } from '../api';
+import { api, APP_VERSION, AuthOptions } from '../api';
 import { colors, personColor } from '../theme';
 import { Button, Card, ErrorText, Field, Gradient, Icon, Muted, Overline } from '../ui';
 import { DarkToggle } from '../Appearance';
@@ -162,6 +162,7 @@ export default function LoginScreen({ onSignedIn }: { onSignedIn: () => void }) 
       {opts?.microsoft && (
         <Text style={{ color: colors.primary, fontWeight: '700' }} onPress={() => { window.location.href = '/.auth/logout?post_logout_redirect_uri=/'; }}>Sign out of Microsoft too</Text>
       )}
+      <Text style={{ color: colors.faint, fontSize: 12, fontWeight: '700' }}>Famhub {APP_VERSION}</Text>
     </View>
   );
 }

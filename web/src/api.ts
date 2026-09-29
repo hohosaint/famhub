@@ -100,7 +100,7 @@ if (typeof window !== 'undefined' && typeof window.fetch === 'function' && !(win
 }
 
 // Must match the server version (server/server.js /api/health).
-export const APP_VERSION = '4.5';
+export const APP_VERSION = '4.6';
 
 async function call<T>(method: string, path: string, body?: unknown): Promise<T> {
   const res = await fetch(path, {

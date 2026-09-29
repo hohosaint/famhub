@@ -1,0 +1,13 @@
+{
+  "name": "famhub",
+  "version": "4.6.0",
+  "private": true,
+  "description": "Famhub. The app that runs on Azure is in the server folder; this file lets Azure and GitHub build from the top of the repository.",
+  "scripts": {
+    "postinstall": "cd server && npm install --omit=dev --no-audit --no-fund",
+    "start": "node server/server.js"
+  },
+  "engines": {
+    "node": ">=22"
+  }
+}

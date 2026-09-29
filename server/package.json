@@ -1,6 +1,6 @@
 {
   "name": "famhub-server",
-  "version": "4.5.0",
+  "version": "4.6.0",
   "private": true,
   "description": "Serves the Famhub web app and its API on Azure App Service",
   "main": "server.js",

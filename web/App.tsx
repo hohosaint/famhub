@@ -3,7 +3,7 @@ import { ActivityIndicator, Platform, Pressable, ScrollView, StyleSheet, Text, V
 import { StatusBar } from 'expo-status-bar';
 import { APP_VERSION, getWindowToken, setWindowToken, api, CircleData, Inbox, Notice, roleLabel, Session, signOut } from './src/api';
 import { colors, shadow } from './src/theme';
-import { Button, ErrorText, Gradient, Icon, IconButton, IconName, Sheet, ListItem } from './src/ui';
+import { Avatar, Button, ErrorText, Gradient, Icon, IconButton, IconName, Row, Sheet, ListItem } from './src/ui';
 import { addInstallTags, currentSubscription, registerServiceWorker } from './src/push';
 import TodayScreen from './src/screens/TodayScreen';
 import CalendarScreen from './src/screens/CalendarScreen';
@@ -63,7 +63,9 @@ export default function App() {
   const [session, setSession] = useState<Session | null>(null);
   const [signedOut, setSignedOut] = useState(false);
   const [serverVersion, setServerVersion] = useState<string | null>(null);
-  useEffect(() => { fetch('/api/health').then((r) => r.json()).then((h) => setServerVersion(String(h.version || '?'))).catch(() => {}); }, []);
+  const [health, setHealth] = useState<{ version?: string; builtAt?: string; startedAt?: string; mode?: string } | null>(null);
+  const [aboutOpen, setAboutOpen] = useState(false);
+  useEffect(() => { fetch('/api/health').then((r) => r.json()).then((h) => { setHealth(h); setServerVersion(String(h.version || '?')); }).catch(() => {}); }, []);
   const versionBanner = serverVersion && serverVersion !== APP_VERSION ? (
     <View style={{ backgroundColor: colors.danger, padding: 10 }}>
       <Text style={{ color: '#fff', fontWeight: '700', textAlign: 'center' }}>This page is Famhub {APP_VERSION} but the server is still running {serverVersion}. Stop the server and start it again (on Azure, deploy again), then refresh.</Text>
@@ -255,7 +257,36 @@ export default function App() {
       <LivePill live={live} onPress={() => setPresenceOpen(true)} />
       <DarkToggle />
       {data && <IconButton icon={unread ? 'notifications' : 'notifications-outline'} label={`Notifications, ${unread} unread`} badge={unread} onPress={() => go('inbox')} color={inbox?.urgentUnread ? colors.danger : colors.text} />}
+      <Pressable onPress={() => setAboutOpen(true)} accessibilityRole="button" accessibilityLabel={`${session.user.name}. Famhub version ${APP_VERSION}. Open profile and version`}
+        style={({ pressed }) => ({ alignItems: 'center', gap: 2, paddingHorizontal: 2, opacity: pressed ? 0.7 : 1 })}>
+        <Avatar id={session.user.id} name={session.user.name || '?'} size={32} />
+        <Text style={{ fontSize: 10, fontWeight: '800', color: serverVersion && serverVersion !== APP_VERSION ? colors.danger : colors.muted, letterSpacing: 0.3 }}>v{APP_VERSION}</Text>
+      </Pressable>
     </View>
+  );
+  const fmtStamp = (iso?: string) => (iso ? new Date(iso).toLocaleString('en-SG', { timeZone: 'Asia/Singapore', day: 'numeric', month: 'short', year: 'numeric', hour: 'numeric', minute: '2-digit' }) : 'not known');
+  const aboutSheet = aboutOpen && (
+    <Sheet visible title="Profile and version" onClose={() => setAboutOpen(false)}>
+      <Row style={{ gap: 12, flexWrap: 'nowrap' }}>
+        <Avatar id={session.user.id} name={session.user.name || '?'} size={48} />
+        <View style={{ flex: 1 }}>
+          <Text style={{ fontSize: 18, fontWeight: '800', color: colors.text }}>{session.user.name}</Text>
+          {!!session.user.email && <Text style={{ color: colors.muted }}>{session.user.email}</Text>}
+        </View>
+      </Row>
+      <View style={{ gap: 6, padding: 12, borderRadius: 14, backgroundColor: colors.surfaceAlt }}>
+        <Text style={{ fontWeight: '900', fontSize: 16, color: colors.text }}>Famhub {APP_VERSION}</Text>
+        <Text style={{ color: colors.muted }}>This page: {APP_VERSION}</Text>
+        <Text style={{ color: serverVersion && serverVersion !== APP_VERSION ? colors.danger : colors.muted }}>Server: {serverVersion || 'checking...'}{serverVersion && serverVersion !== APP_VERSION ? ' (different: refresh the page after the deploy finishes)' : ''}</Text>
+        <Text style={{ color: colors.muted }}>Updated: {fmtStamp(health?.builtAt)}</Text>
+        <Text style={{ color: colors.muted }}>Server started: {fmtStamp(health?.startedAt)}</Text>
+        {health?.mode === 'test' && <Text style={{ color: colors.warn, fontWeight: '700' }}>Test mode</Text>}
+      </View>
+      <Row>
+        <Button icon="person-circle-outline" label="My profile" onPress={() => { setAboutOpen(false); go(data?.role === 'parent' ? 'notify' : 'me'); }} />
+        <Button kind="secondary" icon="refresh" label="Reload page" onPress={() => window.location.reload()} />
+      </Row>
+    </Sheet>
   );
 
   const toastView = toast && (() => {
@@ -317,6 +348,7 @@ export default function App() {
         </View>
         {nav}
       </View>
+      {aboutSheet}
       {presenceOpen && <PresenceSheet live={live} close={() => setPresenceOpen(false)} go={go} />}
       {circlePicker && (
         <Sheet visible title="Your care circles" onClose={() => setCirclePicker(false)}>
