@@ -241,6 +241,22 @@ function runSchedule(state) {
       }
     }
 
+    // Baby routine (4.9): remind the person responsible at the time; tell the family if not ticked 45 minutes later.
+    if (isBaby && Array.isArray(circle.routine)) {
+      for (const r of circle.routine) {
+        const late = nowMin - minutesOf(r.time);
+        if (late < 0 || late >= 180) continue;
+        const ticked = (state.routineDone || []).some((x) => x.circleId === c && x.itemId === r.id && x.day === today);
+        if (ticked) continue;
+        const who = r.who ? [r.who] : [...helpers, ...family];
+        const what = `${r.title}${r.kind === 'milk' && r.ml ? ` ${r.ml} ml` : ''}${r.detail ? `: ${r.detail}` : ''}`;
+        if (late < 15) notify(state, { ...base, to: who, category: 'baby', priority: 'important', key: `routine-due:${r.id}:${today}`,
+          title: `${r.time} ${what}`, body: `Tick it in Routine when done.`, tab: 'care' });
+        if (late >= 45 && late < 60) notify(state, { ...base, to: family, category: 'baby', priority: 'normal', key: `routine-late:${r.id}:${today}`,
+          title: `Not ticked yet: ${r.time} ${r.title}`, body: `Nobody has ticked ${r.title} for ${circle.parentName}.`, tab: 'care' });
+      }
+    }
+
     const checks = state.checkins.filter((x) => x.circleId === c && x.kind === 'ok' && sgDate(new Date(new Date(x.createdAt).getTime() + 8 * 3600e3)) === today);
     const noCheckin = isBaby || (circle.profile && circle.profile.careFor === 'kid') || !circle.checkinBy;
     if (!checks.length && !noCheckin) {

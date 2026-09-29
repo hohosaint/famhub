@@ -24,7 +24,7 @@ function emptyState() {
     version: STATE_VERSION,
     users: [], circles: [], members: [], invites: [],
     appointments: [], tasks: [], notes: [], expenses: [], documents: [], files: [],
-    medications: [], doseLogs: [], renewals: [], checkins: [], activity: [], reads: {}, visits: [], babyLogs: [], payments: [], payPlans: [],
+    medications: [], doseLogs: [], renewals: [], checkins: [], activity: [], reads: {}, visits: [], babyLogs: [], payments: [], payPlans: [], routineDone: [],
     notifications: [], prefs: {}, pushSubs: [], sentKeys: {},
   };
 }
@@ -119,6 +119,7 @@ function migrate(state) {
   if (!Array.isArray(state.babyLogs)) state.babyLogs = []; // baby log (added in 4.0)
   if (!Array.isArray(state.payments)) state.payments = []; // PayNow and PayLah! payments (added in 4.8)
   if (!Array.isArray(state.payPlans)) state.payPlans = [];
+  if (!Array.isArray(state.routineDone)) state.routineDone = []; // infant routine ticks (added in 4.9)
   if (state.version === 2) {
     Object.assign(state, { notifications: [], prefs: {}, pushSubs: [], sentKeys: {} }, {
       notifications: state.notifications || [], prefs: state.prefs || {}, pushSubs: state.pushSubs || [], sentKeys: state.sentKeys || {},
@@ -138,7 +139,7 @@ function addDemoBabyCircle(state) {
   state.circles.push({
     id: c, name: "Ethan and Emma's circle", parentName: 'Ethan and Emma', parentPhone: '', checkinBy: '', emergencyContacts: [{ name: 'Mei Ling', phone: '+6591110002', relation: 'Mother' }],
     createdAt: now, demo: true, profile: { careFor: 'baby', stage: 'newborn', living: 'grandparents', needs: ['formula', 'premature'], relation: 'Twins', count: 2 },
-    baby: { feedEvery: 3 },
+    baby: { feedEvery: 0 },
     babies: [
       { id: ethan, name: 'Ethan', sex: 'boy', birthDate: sgDay(-40), formulaId: 'similac-5mo-1', per100ml: null, customName: '', color: '#2563EB', targetsMode: 'auto' },
       { id: emma, name: 'Emma', sex: 'girl', birthDate: sgDay(-40), formulaId: 'similac-5mo-1', per100ml: null, customName: '', color: '#DB2777', targetsMode: 'auto' },
@@ -168,6 +169,25 @@ function addDemoBabyCircle(state) {
   for (const [daysAgo, kg] of [[40, 2.3], [30, 2.6], [20, 2.9], [10, 3.3], [1, 3.6]]) log(emma, daysAgo, 11, 5, 'weight', { kg });
   for (const [daysAgo, cm] of [[40, 47], [20, 50], [1, 53.5]]) log(ethan, daysAgo, 11, 2, 'height', { cm });
   for (const [daysAgo, cm] of [[40, 46], [20, 48.5], [1, 52]]) log(emma, daysAgo, 11, 7, 'height', { cm });
+  // Daily routine (4.9) with Siti responsible, ticked up to now.
+  const RT = require('./routine');
+  const circle = state.circles.find((x) => x.id === c);
+  circle.routine = RT.make(RT.suggested(RT.ageMonths(sgDay(-40))), 'demo-siti');
+  const nowHM = new Date(Date.now() + 8 * 3600e3).toISOString().slice(11, 16);
+  state.routineDone = state.routineDone || [];
+  for (const r of circle.routine.filter((x) => x.time <= nowHM && x.time >= '06:00').slice(0, -1)) {
+    const [h, mi] = r.time.split(':').map(Number);
+    state.routineDone.push({ id: randomUUID(), circleId: c, itemId: r.id, day: sgDay(0), babyIds: [ethan, emma], at: sgIso(0, h, Math.min(59, mi + 8)), by: 'demo-siti', note: '', amounts: r.kind === 'milk' ? { [ethan]: r.ml, [emma]: r.ml - 10 } : {}, eaten: '', logIds: [] });
+  }
+  // Check-ups and vaccinations from the Singapore schedule, and a few jobs.
+  for (const ck of RT.CHECKUPS) {
+    const when = RT.checkupDate(sgDay(-40), ck);
+    if (when.getTime() < Date.now()) continue;
+    state.appointments.push({ id: randomUUID(), circleId: c, title: `${ck.title} (Ethan and Emma)`, startsAt: when.toISOString(), location: 'Polyclinic', notes: ck.notes, escortUserId: ck.key === 'm2' ? 'demo-meiling' : '', outcome: '', checkup: `${ck.key}:${ethan}`, createdBy: 'demo-meiling', updatedAt: now });
+  }
+  for (const [title, d, who, status] of [['Buy diapers (size S) and wipes', 1, 'demo-siti', 'accepted'], ['Sterilise all bottles', 0, 'demo-siti', 'accepted'], ['Book the 2-month vaccination slot', 2, 'demo-meiling', 'open']]) {
+    state.tasks.push({ id: randomUUID(), circleId: c, title, category: 'errand', dueDate: sgDay(d), dueTime: '', assigneeUserId: who, status, createdBy: 'demo-meiling', createdAt: now, doneBy: '', doneAt: '' });
+  }
   return c;
 }
 

@@ -144,6 +144,16 @@ export default function CalendarScreen(props: ScreenProps) {
   return (
     <View style={{ gap: 16 }}>
       <PageHeader title="Calendar" subtitle="Colour shows who is going" right={data.can.editAppointments ? <Button icon="add" label="Add" onPress={() => setSheet('new')} /> : undefined} />
+      {data.baby && data.can.editAppointments && data.baby.checkups.some((c) => !c.added) && (
+        <Card style={{ gap: 8, borderColor: '#F45B8D55', borderWidth: 1.5 }}>
+          <Row style={{ gap: 10, flexWrap: 'nowrap' }}>
+            <Icon name="medkit" size={22} color="#DB2777" />
+            <Text style={{ flex: 1, fontSize: 16, fontWeight: '800', color: colors.text }}>Check-ups and vaccinations</Text>
+          </Row>
+          <Muted>Add the usual Singapore baby check-ups and the vaccinations in the National Childhood Immunisation Schedule (2, 4, 6, 12, 15 and 18 months), worked out from the birth date. Change each one to your booked date and time.</Muted>
+          <Button icon="add-circle" label="Add them to the calendar" onPress={() => run(() => api.addCheckups(cid), refresh, setError)} />
+        </Card>
+      )}
       <Row style={{ justifyContent: 'space-between' }}>
         <Text style={{ fontSize: 16, fontWeight: '700' }}>{fmtDate(day)}</Text>
         <Row>

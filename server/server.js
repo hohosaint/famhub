@@ -12,6 +12,7 @@ const Seen = require('./lib/seen');
 Seen.init(store.dataDir);
 const { payNowPayload, normaliseMobile } = require('./lib/paynow');
 const PAY = require('./lib/payments');
+const RT = require('./lib/routine');
 const A = require('./lib/auth');
 const { currentUser, testModeAllowed, DEMO_USERS } = A;
 const L = require('./lib/logic');
@@ -104,7 +105,7 @@ function find(list, id, circleId, what) {
 // ---------- session, test mode ----------
 
 // When this version was built (the web pages) and when the server started, shown in the app under the profile button.
-const APP_VERSION = '4.8';
+const APP_VERSION = '4.9';
 const STARTED_AT = new Date().toISOString();
 let BUILT_AT = '';
 try { BUILT_AT = fs.statSync(path.join(__dirname, 'public', 'index.html')).mtime.toISOString(); } catch { /* no pages yet */ }
@@ -121,11 +122,11 @@ app.get('/api/session', wrap(async (req, res) => {
     const u = ensureUser(state, user);
     const circles = state.members.filter((m) => m.userId === user.id).map((m) => {
       const c = state.circles.find((x) => x.id === m.circleId);
-      return { id: c.id, name: c.name, role: m.role, careFor: (c.profile && c.profile.careFor) || 'elder', parentName: c.parentName };
+      return { id: c.id, name: c.name, role: m.role, careFor: (c.profile && c.profile.careFor) || 'elder', parentName: c.parentName, photo: c.personPhoto || (Array.isArray(c.babies) && c.babies[0] && c.babies[0].photo) || '' };
     });
     A.ensureUsernames(state);
     const testing = user.source === 'test mode' ? profileLabel(state, u) : '';
-    return { user: { id: u.id, name: u.name, username: u.username || '', email: u.email || '', account: !!u.account, paynow: u.paynow, source: user.source, testingAs: testing }, circles };
+    return { user: { id: u.id, name: u.name, username: u.username || '', email: u.email || '', account: !!u.account, paynow: u.paynow, photo: u.photo || '', source: user.source, testingAs: testing }, circles };
   });
   if (!data) { A.clearSession(req, res); fail(401, 'This account was removed. Please sign in again.'); }
   const testMode = testModeAllowed(req);
@@ -422,6 +423,84 @@ app.patch('/api/me', wrap(async (req, res) => {
   res.json(u);
 }));
 
+// ---------- profile photos for people, babies and the person cared for (4.9) ----------
+const PHOTO_TYPES = ['image/jpeg', 'image/png', 'image/webp'];
+function savePhoto(state, req, owner) {
+  const type = (req.get('content-type') || '').split(';')[0];
+  if (!PHOTO_TYPES.includes(type) || !Buffer.isBuffer(req.body) || !req.body.length) fail(400, 'Choose a photo (JPG, PNG or WEBP) up to 5 MB.');
+  const id = randomUUID();
+  fs.writeFileSync(path.join(store.filesDir, id), req.body);
+  state.files.push({ id, circleId: owner.circleId || '', name: 'photo', type, size: req.body.length, avatar: owner, uploadedAt: new Date().toISOString() });
+  return id;
+}
+function dropPhoto(state, fileId) {
+  if (!fileId) return;
+  state.files = state.files.filter((f) => f.id !== fileId);
+  try { fs.unlinkSync(path.join(store.filesDir, fileId)); } catch { /* already gone */ }
+}
+const rawPhoto = express.raw({ type: PHOTO_TYPES, limit: '5mb' });
+
+app.post('/api/me/photo', rawPhoto, wrap(async (req, res) => {
+  const user = me(req);
+  const out = await store.update((state) => {
+    const u = ensureUser(state, user);
+    const id = savePhoto(state, req, { kind: 'user', userId: u.id });
+    dropPhoto(state, u.photo);
+    u.photo = id;
+    return { photo: id };
+  });
+  res.status(201).json(out);
+}));
+app.delete('/api/me/photo', wrap(async (req, res) => {
+  const user = me(req);
+  await store.update((state) => { const u = ensureUser(state, user); dropPhoto(state, u.photo); u.photo = ''; });
+  res.status(204).end();
+}));
+
+// who = "person" (the person the circle is for) or a baby id.
+function photoTarget(state, circle, role, who) {
+  if (who === 'person') {
+    if (!['owner', 'family', 'parent'].includes(role)) fail(403, 'Only the owner, family or the person themselves can change this photo.');
+    return { get: () => circle.personPhoto || '', set: (v) => { circle.personPhoto = v; }, name: circle.parentName };
+  }
+  if (role === 'parent') fail(403, 'Only family and helpers can change a baby\'s photo.');
+  const b = findBaby(circle, who);
+  return { get: () => b.photo || '', set: (v) => { b.photo = v; }, name: b.name };
+}
+app.post('/api/circles/:circleId/photo', rawPhoto, wrap(async (req, res) => {
+  const out = await inCircle(req, null, ({ state, circle, role, say }) => {
+    const t = photoTarget(state, circle, role, String(req.query.who || 'person'));
+    const id = savePhoto(state, req, { kind: 'circle', circleId: circle.id });
+    dropPhoto(state, t.get());
+    t.set(id);
+    say(`changed ${t.name}'s photo`);
+    return { photo: id };
+  });
+  res.status(201).json(out);
+}));
+app.delete('/api/circles/:circleId/photo', wrap(async (req, res) => {
+  await inCircle(req, null, ({ state, circle, role }) => {
+    const t = photoTarget(state, circle, role, String(req.query.who || 'person'));
+    dropPhoto(state, t.get()); t.set('');
+  });
+  res.status(204).end();
+}));
+app.get('/api/photos/:fileId', wrap(async (req, res) => {
+  const user = me(req);
+  const state = await store.read();
+  const f = state.files.find((x) => x.id === req.params.fileId && x.avatar);
+  if (!f) fail(404, 'Photo not found.');
+  const mine = new Set(state.members.filter((m) => m.userId === user.id).map((m) => m.circleId));
+  const ok = f.avatar.kind === 'user'
+    ? f.avatar.userId === user.id || state.members.some((m) => m.userId === f.avatar.userId && mine.has(m.circleId))
+    : mine.has(f.avatar.circleId);
+  if (!ok) fail(404, 'Photo not found.');
+  const disk = path.join(store.filesDir, f.id);
+  if (!fs.existsSync(disk)) fail(404, 'Photo is missing.');
+  res.type(f.type).set('Cache-Control', 'private, max-age=86400');
+  fs.createReadStream(disk).pipe(res);
+}));
+
 // ---------- circles, invites, members ----------
 
 app.post('/api/circles', wrap(async (req, res) => {
@@ -537,6 +616,11 @@ app.get('/api/circles/:circleId', wrap(async (req, res) => {
         ...v, files: (v.fileIds || []).map((id) => { const f = state.files.find((x) => x.id === id); return f ? { id, name: f.name, type: f.type } : null; }).filter(Boolean),
       })) : [],
     };
+    view.photos = Object.fromEntries([
+      ...state.members.filter((m) => m.circleId === c).map((m) => [m.userId, (state.users.find((u) => u.id === m.userId) || {}).photo || '']),
+      [`person-${c}`, circle.personPhoto || (Array.isArray(circle.babies) && circle.babies[0] && circle.babies[0].photo) || ''],
+      ...(circle.profile && circle.profile.careFor === 'baby' ? babiesOf(circle).map((b) => [b.id, b.photo || '']) : []),
+    ].filter(([, v]) => v));
     if (L.can(role, 'seeMoney')) {
       view.expenses = state.expenses.filter((x) => x.circleId === c).sort((a, b) => b.spentOn.localeCompare(a.spentOn) || b.createdAt.localeCompare(a.createdAt));
       view.balances = L.balances(state, c);
@@ -922,9 +1006,156 @@ function babyView(state, circle) {
   const babies = babiesOf(circle);
   const logs = babyLogsWhere(state, circle, (x) => x.at >= since || ['weight', 'height', 'head'].includes(x.kind));
   const feedEvery = (circle.baby && circle.baby.feedEvery) || 0;
+  const doneSince = new Date(Date.now() - 2 * 86400e3).toISOString();
   return { babies: babies.map((b) => ({ ...b, formula: babyFormula(b, circle), targets: b.targets || null })), feedEvery, breastMilk: F.BREAST_MILK, logs,
-    myFoods: myFoods(circle), presetFoods: BF.FOODS };
+    myFoods: myFoods(circle), presetFoods: BF.FOODS,
+    routine: routineOf(state, circle).slice().sort((a, b) => a.time.localeCompare(b.time)),
+    routineDone: (state.routineDone || []).filter((x) => x.circleId === circle.id && x.at >= doneSince),
+    checkups: RT.CHECKUPS.map((c) => ({ key: c.key, title: c.title, added: state.appointments.some((a) => a.circleId === circle.id && a.checkup && a.checkup.startsWith(`${c.key}:`)) })) };
 }
+
+// ---------- infant routine and check-ups (4.9) ----------
+function routineOf(state, circle) {
+  if (!Array.isArray(circle.routine)) {
+    const b = babiesOf(circle)[0];
+    const helper = state.members.find((m) => m.circleId === circle.id && m.role === 'helper');
+    circle.routine = RT.make(RT.suggested(RT.ageMonths(b && b.birthDate)), helper ? helper.userId : '');
+  }
+  return circle.routine;
+}
+function readRoutineItem(state, circle, b, old = {}) {
+  const time = b.time !== undefined ? b.time : old.time;
+  if (!isTime(time)) fail(400, 'Enter the time, for example 07:30.');
+  const kind = RT.KINDS.includes(b.kind) ? b.kind : old.kind || 'other';
+  const title = (b.title !== undefined ? text(b.title, 50) : old.title) || { milk: 'Milk', meal: 'Meal', nap: 'Nap', bath: 'Bath', medicine: 'Medicine', play: 'Play', other: 'Task' }[kind];
+  const ml = kind === 'milk' ? Math.max(0, Math.min(400, Math.round(Number(b.ml !== undefined ? b.ml : old.ml) || 0))) : 0;
+  let who = b.who !== undefined ? b.who : old.who || '';
+  if (who && !state.members.some((m) => m.circleId === circle.id && m.userId === who)) who = '';
+  return { time, kind, title, detail: b.detail !== undefined ? text(b.detail, 120) : old.detail || '', ml, who };
+}
+const noParent = (role) => { if (role === 'parent') fail(403, 'Only family and helpers can change the routine.'); };
+const babyCircle = (circle) => { if (!(circle.profile && circle.profile.careFor === 'baby')) fail(400, 'This circle has no baby routine.'); };
+
+app.post('/api/circles/:circleId/baby/routine', wrap(async (req, res) => {
+  const out = await inCircle(req, 'logDoses', ({ state, circle, role, say }) => {
+    noParent(role); babyCircle(circle);
+    const list = routineOf(state, circle);
+    if (list.length >= 40) fail(400, 'The routine is full (40 items).');
+    const item = { id: randomUUID(), ...readRoutineItem(state, circle, req.body) };
+    list.push(item);
+    say(`added ${item.title} at ${item.time} to the routine`);
+    return item;
+  });
+  res.status(201).json(out);
+}));
+app.patch('/api/circles/:circleId/baby/routine/:id', wrap(async (req, res) => {
+  const out = await inCircle(req, 'logDoses', ({ state, circle, role, say }) => {
+    noParent(role); babyCircle(circle);
+    const item = routineOf(state, circle).find((x) => x.id === req.params.id);
+    if (!item) fail(404, 'Routine item not found.');
+    Object.assign(item, readRoutineItem(state, circle, req.body, item));
+    say(`changed ${item.title} at ${item.time} in the routine`);
+    return item;
+  });
+  res.json(out);
+}));
+app.delete('/api/circles/:circleId/baby/routine/:id', wrap(async (req, res) => {
+  await inCircle(req, 'logDoses', ({ state, circle, role, say }) => {
+    noParent(role); babyCircle(circle);
+    const item = routineOf(state, circle).find((x) => x.id === req.params.id);
+    if (!item) fail(404, 'Routine item not found.');
+    circle.routine = circle.routine.filter((x) => x !== item);
+    say(`removed ${item.title} at ${item.time} from the routine`);
+  });
+  res.status(204).end();
+}));
+// Replace the routine with the suggested one for the baby's age.
+app.post('/api/circles/:circleId/baby/routine-reset', wrap(async (req, res) => {
+  const out = await inCircle(req, 'logDoses', ({ state, circle, role, say }) => {
+    noParent(role); babyCircle(circle);
+    const b = babiesOf(circle)[0];
+    const helper = state.members.find((m) => m.circleId === circle.id && m.role === 'helper');
+    circle.routine = RT.make(RT.suggested(RT.ageMonths(b && b.birthDate)), helper ? helper.userId : '');
+    say('set the routine to the suggested one for the baby\'s age');
+    return circle.routine;
+  });
+  res.json(out);
+}));
+
+// Tick a routine item for today. Milk and meals are also saved in the baby log for reports.
+app.post('/api/circles/:circleId/baby/routine/:id/done', wrap(async (req, res) => {
+  const out = await inCircle(req, 'logDoses', ({ state, circle, userId, say }) => {
+    babyCircle(circle);
+    const item = routineOf(state, circle).find((x) => x.id === req.params.id);
+    if (!item) fail(404, 'Routine item not found.');
+    const babies = babiesOf(circle);
+    const ids = Array.isArray(req.body.babyIds) && req.body.babyIds.length ? req.body.babyIds.filter((id) => babies.some((b) => b.id === id)) : babies.map((b) => b.id);
+    if (!ids.length) fail(400, 'Choose the baby.');
+    const at = new Date().toISOString();
+    const day = L.todaySG();
+    state.routineDone = state.routineDone || [];
+    if (state.routineDone.some((x) => x.circleId === circle.id && x.itemId === item.id && x.day === day && ids.some((i) => x.babyIds.includes(i)))) fail(400, 'Already ticked today.');
+    const note = text(req.body.note, 200);
+    const logIds = [];
+    const amounts = {};
+    for (const id of ids) {
+      const baby = babies.find((b) => b.id === id);
+      if (item.kind === 'milk') {
+        const raw = req.body.amounts && req.body.amounts[id] !== undefined ? req.body.amounts[id] : req.body.ml !== undefined ? req.body.ml : item.ml;
+        const ml = Math.round(Number(raw) || 0);
+        if (!(ml > 0 && ml <= 400)) fail(400, `Enter how many ml ${baby.name} drank.`);
+        amounts[id] = ml;
+        const log = { id: randomUUID(), circleId: circle.id, babyId: id, kind: 'bottle', at, by: userId, note, ml, source: 'formula', routineId: item.id };
+        const f = babyFormula(baby, circle);
+        if (f) { log.formula = f.name; log.per100ml = f.per100ml; }
+        state.babyLogs.push(log); logIds.push(log.id);
+      } else if (item.kind === 'meal') {
+        const eaten = ['all', 'most', 'some', 'little'].includes(req.body.eaten) ? req.body.eaten : 'all';
+        const log = { id: randomUUID(), circleId: circle.id, babyId: id, kind: 'solids', at, by: userId, note, food: item.detail || item.title, amount: { all: 'All', most: 'Most', some: 'Some', little: 'A little' }[eaten], routineId: item.id };
+        state.babyLogs.push(log); logIds.push(log.id);
+      }
+    }
+    if (item.kind === 'milk') for (const x of state.notifications.filter((x) => x.circleId === circle.id && x.category === 'baby' && !x.readAt)) x.readAt = at;
+    const rec = { id: randomUUID(), circleId: circle.id, itemId: item.id, day, babyIds: ids, at, by: userId, note, amounts, eaten: item.kind === 'meal' ? req.body.eaten || 'all' : '', logIds };
+    state.routineDone.push(rec);
+    const names = ids.map((id) => babies.find((b) => b.id === id).name).join(' and ');
+    say(`ticked ${item.title}${item.kind === 'milk' ? ` (${Object.values(amounts).join(' / ')} ml)` : ''} for ${names}`);
+    return rec;
+  });
+  res.status(201).json(out);
+}));
+app.delete('/api/circles/:circleId/baby/routine-done/:id', wrap(async (req, res) => {
+  await inCircle(req, 'logDoses', ({ state, circle, say }) => {
+    const rec = find(state.routineDone || [], req.params.id, circle.id, 'Tick');
+    state.routineDone = state.routineDone.filter((x) => x !== rec);
+    state.babyLogs = state.babyLogs.filter((x) => !rec.logIds.includes(x.id));
+    say('undid a routine tick');
+  });
+  res.status(204).end();
+}));
+
+// Add the standard check-ups and vaccinations (still to come) to the calendar.
+app.post('/api/circles/:circleId/baby/checkups', wrap(async (req, res) => {
+  const out = await inCircle(req, 'editAppointments', ({ state, circle, userId, say }) => {
+    babyCircle(circle);
+    const now = Date.now();
+    let added = 0;
+    for (const b of babiesOf(circle).filter((x) => x.birthDate).slice(0, 1)) {
+      for (const c of RT.CHECKUPS) {
+        const when = RT.checkupDate(b.birthDate, c);
+        if (when.getTime() < now - 86400e3) continue;
+        if (state.appointments.some((a) => a.circleId === circle.id && a.checkup && a.checkup.startsWith(`${c.key}:`))) continue;
+        const names = babiesOf(circle).map((x) => x.name).join(' and ');
+        state.appointments.push({ id: randomUUID(), circleId: circle.id, title: `${c.title} (${names})`, startsAt: when.toISOString(), location: 'Polyclinic or family doctor', notes: `${c.notes} Suggested date: change it to the booked date and time.`, escortUserId: '', outcome: '', checkup: `${c.key}:${b.id}`, createdBy: userId, updatedAt: new Date().toISOString() });
+        added++;
+      }
+    }
+    if (!babiesOf(circle).some((x) => x.birthDate)) fail(400, 'Add the baby\'s birth date first (More, Baby details).');
+    say(`added ${added} check-up${added === 1 ? '' : 's'} and vaccinations to the calendar`);
+    return { added };
+  });
+  res.json(out);
+}));
 
 // Reports: every log between two Singapore dates (up to about 13 months), plus all growth entries.
 app.get('/api/circles/:circleId/baby/report', wrap(async (req, res) => {

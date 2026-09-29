@@ -2,7 +2,7 @@ import { Platform, Pressable, ScrollView, Text, View } from 'react-native';
 import type { CareFor, Session } from './api';
 import { KINDS, kindOf } from './family';
 import { colors } from './theme';
-import { Gradient, Icon } from './ui';
+import { Avatar, avatarPhotoOf, Gradient, Icon } from './ui';
 
 // Tabs across the top: Parents, Infants, Kids, Teens. Flip between them in one tap; when a tab has
 // several circles (Mum and Dad, or two kids) their names show as chips underneath.
@@ -59,9 +59,10 @@ export default function FamilyTabs({ circles, cid, active, onKind, onCircle, onA
             return (
               <Pressable key={c.id} onPress={() => onCircle(c.id)} accessibilityRole="button" accessibilityState={{ selected: on }} accessibilityLabel={`${c.name}${on ? ', open' : ''}`}
                 style={{ flexDirection: 'row', alignItems: 'center', gap: 8, paddingVertical: 6, paddingLeft: 6, paddingRight: 14, borderRadius: 999, borderWidth: 1.5, borderColor: on ? k.color : colors.border, backgroundColor: on ? colors.card : 'transparent' }}>
+                {avatarPhotoOf(`person-${c.id}`) ? <Avatar id={`person-${c.id}`} name={label} size={26} /> : (
                 <Gradient colors={k.gradient} fallback={k.color} style={{ width: 26, height: 26, borderRadius: 13, alignItems: 'center', justifyContent: 'center' }}>
                   <Text style={{ color: '#fff', fontWeight: '900', fontSize: 12 }}>{label.slice(0, 1).toUpperCase()}</Text>
-                </Gradient>
+                </Gradient>)}
                 <Text style={{ fontWeight: on ? '900' : '700', color: on ? colors.text : colors.muted, fontSize: 14 }} numberOfLines={1}>{label}</Text>
               </Pressable>
             );

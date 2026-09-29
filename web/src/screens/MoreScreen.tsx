@@ -7,6 +7,9 @@ import { Text } from 'react-native';
 
 export default function MoreScreen({ data, go }: ScreenProps) {
   const items = [
+    data.baby && { key: 'nutrition', icon: 'nutrition-outline', title: 'Feeding details and growth', subtitle: 'Breastfeeds, diapers, weight, milk and food nutrition', color: '#F97316' },
+    data.baby && { key: 'babyreport', icon: 'bar-chart-outline', title: 'Reports', subtitle: 'Day, week, month or chosen dates', color: '#2563EB' },
+    data.baby && { key: 'requests', icon: 'hand-left-outline', title: 'All jobs and requests', subtitle: 'Everything on the to-do list, with dates and repeats', color: colors.warn },
     { key: 'payments', icon: 'qr-code-outline', title: 'Payments (PayNow and PayLah!)', subtitle: data.can.editMoney ? 'Request money, pay the helper, allowances and pocket money' : 'Request money and see what you are owed', color: '#7C1A78' },
     data.can.seeMoney && { key: 'costs', icon: 'wallet-outline', title: 'Costs and settle up', subtitle: 'Shared expenses, settle up by PayNow or PayLah!, monthly statement', color: colors.ok },
     { key: 'docs', icon: 'folder-open-outline', title: 'Documents', subtitle: data.role === 'helper' ? 'Shared with you' : 'Letters, discharge summaries, insurance', color: colors.info },

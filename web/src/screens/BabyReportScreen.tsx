@@ -269,7 +269,7 @@ export default function BabyReportScreen({ data, cid, go }: ScreenProps) {
 
   return (
     <View style={{ gap: 14 }}>
-      <Pressable onPress={() => go('care')} accessibilityRole="link" style={{ flexDirection: 'row', alignItems: 'center', gap: 4 }}><Icon name="chevron-back" size={20} color={colors.primary} /><Text style={{ color: colors.primary, fontWeight: '700', fontSize: 15 }}>{babies.length > 1 ? 'Babies' : 'Baby'}</Text></Pressable>
+      <Pressable onPress={() => go('care')} accessibilityRole="link" style={{ flexDirection: 'row', alignItems: 'center', gap: 4 }}><Icon name="chevron-back" size={20} color={colors.primary} /><Text style={{ color: colors.primary, fontWeight: '700', fontSize: 15 }}>Routine</Text></Pressable>
       <Gradient colors="linear-gradient(135deg, #FF8A5B 0%, #F45B8D 50%, #7C5CFF 100%)" fallback="#F45B8D" style={{ borderRadius: 24, padding: 18, gap: 6 }}>
         <Text style={{ color: 'rgba(255,255,255,0.9)', fontWeight: '800', fontSize: 12, letterSpacing: 1, textTransform: 'uppercase' }}>Reports</Text>
         <Text accessibilityRole="header" style={{ color: '#fff', fontSize: 26, fontWeight: '900' }}>{data.circle.parentName}</Text>

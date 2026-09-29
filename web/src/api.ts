@@ -45,9 +45,13 @@ export type BabyLog = { id: string; babyId: string; kind: 'bottle' | 'breast' | 
 export type BabyFormula = { id: string; name: string; brand: string; stageLabel: string; per100ml: Macros; typical: boolean };
 export type Targets = { kcal: number | null; protein: number | null; fat: number | null; carbs: number | null; ml: number | null };
 export type FoodItem = { id: string; kind: 'milk' | 'food'; unit: 'ml' | 'g'; name: string; brand?: string; group: string; per100: Macros; typical?: boolean; preset?: boolean; custom?: boolean };
-export type Baby = { id: string; name: string; sex: string; birthDate: string; formulaId: string; per100ml: Macros | null; customName: string; color: string; formula: BabyFormula | null; targets: Targets | null; targetsMode?: 'auto' | 'manual' };
+export type Baby = { id: string; name: string; sex: string; birthDate: string; formulaId: string; per100ml: Macros | null; customName: string; color: string; formula: BabyFormula | null; targets: Targets | null; targetsMode?: 'auto' | 'manual'; photo?: string };
 export type BabyReportData = { from: string; to: string; parentName: string; breastMilk: Macros; logs: BabyLog[]; babies: { id: string; name: string; color: string; birthDate: string; sex: string; targetsMode: 'auto' | 'manual'; targets: Targets | null; formula: BabyFormula | null }[] };
-export type BabyData = { babies: Baby[]; feedEvery: number; breastMilk: Macros; logs: BabyLog[]; myFoods: FoodItem[]; presetFoods: FoodItem[] };
+export type RoutineKind = 'milk' | 'meal' | 'nap' | 'bath' | 'medicine' | 'play' | 'other';
+export type RoutineItem = { id: string; time: string; kind: RoutineKind; title: string; detail: string; ml: number; who: string };
+export type RoutineDone = { id: string; itemId: string; day: string; babyIds: string[]; at: string; by: string; note: string; amounts: Record<string, number>; eaten: string; logIds: string[] };
+export type BabyData = { babies: Baby[]; feedEvery: number; breastMilk: Macros; logs: BabyLog[]; myFoods: FoodItem[]; presetFoods: FoodItem[];
+  routine: RoutineItem[]; routineDone: RoutineDone[]; checkups: { key: string; title: string; added: boolean }[] };
 export type CarePlan = { profile: CareProfile; checkinBy: string; feedEvery?: number; tasks: { key: string; title: string; category: string; days: number }[]; focus: { title: string; tips: string[] }; quietNags: boolean };
 export type ProfileOption = { id: string; label: string; icon: string; desc?: string };
 export type ProfileLists = { stages: ProfileOption[]; living: ProfileOption[]; needs: ProfileOption[] };
@@ -57,12 +61,12 @@ export type CircleData = {
   members: Member[]; appointments: Appointment[]; tasks: Task[]; notes: Note[];
   medications: Medication[]; dosesToday: Dose[];
   lastCheckin: Checkin | null; openHelp: Checkin[]; alerts: Alert[]; activity: Activity[]; unreadCount: number;
-  documents: Doc[]; visits: Visit[]; carePlan: CarePlan | null; baby: BabyData | null; expenses?: Expense[]; balances?: Transfer[]; renewals?: Renewal[]; invites?: Invite[];
+  documents: Doc[]; visits: Visit[]; carePlan: CarePlan | null; baby: BabyData | null; expenses?: Expense[]; balances?: Transfer[]; renewals?: Renewal[]; invites?: Invite[]; photos?: Record<string, string>;
 };
 export type Session = {
-  user: { id: string; name: string; username: string; email?: string; account?: boolean; paynow: string; source: string; testingAs: string };
+  user: { id: string; name: string; username: string; email?: string; account?: boolean; paynow: string; photo?: string; source: string; testingAs: string };
   microsoft: boolean;
-  circles: { id: string; name: string; role: Role; careFor?: CareFor; parentName?: string }[];
+  circles: { id: string; name: string; role: Role; careFor?: CareFor; parentName?: string; photo?: string }[];
   testMode: boolean;
   mode?: 'live' | 'test';
   demoUsers: { id: string; label: string }[];
@@ -101,7 +105,7 @@ if (typeof window !== 'undefined' && typeof window.fetch === 'function' && !(win
 }
 
 // Must match the server version (server/server.js /api/health).
-export const APP_VERSION = '4.8';
+export const APP_VERSION = '4.9';
 
 // Payments with PayNow or PayLah! (4.8)
 export type PayKind = 'request' | 'helper' | 'allowance';
@@ -205,6 +209,17 @@ export const api = {
   addBabyLog: (id: string, body: Record<string, unknown>) => call<BabyLog>('POST', c(id, '/baby/logs'), body),
   updateBabyLog: (id: string, lid: string, body: Record<string, unknown>) => call('PATCH', c(id, `/baby/logs/${lid}`), body),
   deleteBabyLog: (id: string, lid: string) => call('DELETE', c(id, `/baby/logs/${lid}`)),
+  addRoutine: (id: string, body: Partial<RoutineItem>) => call<RoutineItem>('POST', c(id, '/baby/routine'), body),
+  updateRoutine: (id: string, rid: string, body: Partial<RoutineItem>) => call<RoutineItem>('PATCH', c(id, `/baby/routine/${rid}`), body),
+  deleteRoutine: (id: string, rid: string) => call('DELETE', c(id, `/baby/routine/${rid}`)),
+  resetRoutine: (id: string) => call('POST', c(id, '/baby/routine-reset'), {}),
+  tickRoutine: (id: string, rid: string, body: { babyIds?: string[]; amounts?: Record<string, number>; eaten?: string; note?: string }) => call<RoutineDone>('POST', c(id, `/baby/routine/${rid}/done`), body),
+  untickRoutine: (id: string, doneId: string) => call('DELETE', c(id, `/baby/routine-done/${doneId}`)),
+  addCheckups: (id: string) => call<{ added: number }>('POST', c(id, '/baby/checkups'), {}),
+  uploadMyPhoto: async (file: File) => uploadPhoto('/api/me/photo', file),
+  removeMyPhoto: () => call('DELETE', '/api/me/photo'),
+  uploadCirclePhoto: async (id: string, who: string, file: File) => uploadPhoto(c(id, `/photo?who=${encodeURIComponent(who)}`), file),
+  removeCirclePhoto: (id: string, who: string) => call('DELETE', c(id, `/photo?who=${encodeURIComponent(who)}`)),
   babyReport: (id: string, from: string, to: string) => call<BabyReportData>('GET', c(id, `/baby/report?from=${from}&to=${to}`)),
   addBaby: (id: string, body: { name: string; sex?: string; birthDate?: string }) => call<Baby>('POST', c(id, '/baby/babies'), body),
   removeBaby: (id: string, babyId: string) => call('DELETE', c(id, `/baby/babies/${babyId}`)),
@@ -276,6 +291,27 @@ export const photosOf = (n: Note) => (n.fileIds && n.fileIds.length ? n.fileIds 
 // Phone cameras make large files. Resize photos to at most 1600 px and save as JPEG
 // before uploading, so they upload quickly and stay under the 8 MB limit.
 // If the browser cannot read the photo (for example HEIC on some PCs), the original is sent.
+// A square profile photo, 400 x 400 JPEG, cropped from the centre.
+export async function squarePhoto(file: File, size = 400): Promise<Blob> {
+  const url = URL.createObjectURL(file);
+  try {
+    const img = await new Promise<HTMLImageElement>((ok, bad) => { const i = new Image(); i.onload = () => ok(i); i.onerror = () => bad(new Error('That photo could not be opened. Try a JPG or PNG.')); i.src = url; });
+    const side = Math.min(img.naturalWidth, img.naturalHeight);
+    const canvas = document.createElement('canvas'); canvas.width = size; canvas.height = size;
+    const ctx = canvas.getContext('2d')!;
+    ctx.drawImage(img, (img.naturalWidth - side) / 2, (img.naturalHeight - side) / 2, side, side, 0, 0, size, size);
+    return await new Promise<Blob>((ok, bad) => canvas.toBlob((b) => (b ? ok(b) : bad(new Error('Could not prepare the photo.'))), 'image/jpeg', 0.86));
+  } finally { URL.revokeObjectURL(url); }
+}
+async function uploadPhoto(path: string, file: File) {
+  const blob = await squarePhoto(file);
+  const res = await fetch(path, { method: 'POST', credentials: 'include', headers: { 'Content-Type': 'image/jpeg' }, body: blob });
+  const data = await res.json().catch(() => ({}));
+  if (!res.ok) throw new Error(data.error || `Upload failed (${res.status})`);
+  return data as { photo: string };
+}
+export const photoUrl = (fileId: string) => authUrl(`/api/photos/${fileId}`);
+
 export async function shrinkPhoto(file: File): Promise<File> {
   if (typeof document === 'undefined' || !/^image\/(jpeg|png|webp|heic|heif)$/.test(file.type)) return file;
   try {

@@ -1,9 +1,10 @@
-import { createElement, ReactNode, useEffect, useRef } from 'react';
-import { Modal, Platform, Pressable, ScrollView, StyleSheet, Text, TextInput, View, ViewStyle } from 'react-native';
+import { createElement, ReactNode, useEffect, useRef, useState } from 'react';
+import { Image, Modal, Platform, Pressable, ScrollView, StyleSheet, Text, TextInput, View, ViewStyle } from 'react-native';
 import Ionicons from '@expo/vector-icons/Ionicons';
 import { colors, gradients, personColor, radius, shadow } from './theme';
 import { TimeField } from './TimeWheel';
 import { markTyping, setDoing } from './doing';
+import { photoUrl } from './api';
 
 export type IconName = keyof typeof Ionicons.glyphMap;
 export function Icon({ name, size = 22, color = colors.text }: { name: IconName; size?: number; color?: string }) {
@@ -209,11 +210,51 @@ export function Section({ title, children, right }: { title: string; children: R
   );
 }
 
-export function Avatar({ id, name, size = 36 }: { id: string; name: string; size?: number }) {
+// Profile photos (4.9): the app registers photo file ids for people, babies and the person cared for
+// ("person-<circleId>"); every Avatar with that id then shows the photo instead of initials.
+const avatarPhotos: Record<string, string> = {};
+export function setAvatarPhotos(map: Record<string, string | undefined>) { for (const [k, v] of Object.entries(map)) { if (v) avatarPhotos[k] = v; else delete avatarPhotos[k]; } }
+export function avatarPhotoOf(id: string) { return avatarPhotos[id] || ''; }
+
+export function Avatar({ id, name, size = 36, photo }: { id: string; name: string; size?: number; photo?: string }) {
   const initials = name.split(/\s+/).filter(Boolean).slice(0, 2).map((w) => w[0]?.toUpperCase()).join('') || '?';
+  const file = photo !== undefined ? photo : avatarPhotos[id];
+  const [broken, setBroken] = useState('');
+  if (file && broken !== file) {
+    return <Image source={{ uri: photoUrl(file) }} onError={() => setBroken(file)} accessibilityLabel={name} style={{ width: size, height: size, borderRadius: size / 2, backgroundColor: personColor(id) }} />;
+  }
   return (
     <View style={{ width: size, height: size, borderRadius: size / 2, backgroundColor: personColor(id), alignItems: 'center', justifyContent: 'center' }}>
       <Text style={{ color: '#fff', fontWeight: '700', fontSize: size * 0.4 }}>{initials}</Text>
+    </View>
+  );
+}
+
+// Opens the phone's photo picker or camera (web).
+export function pickImage(onPick: (f: File) => void) {
+  if (typeof document === 'undefined') return;
+  const input = document.createElement('input');
+  input.type = 'file'; input.accept = 'image/*';
+  input.onchange = () => { const f = input.files && input.files[0]; if (f) onPick(f); };
+  input.click();
+}
+
+// A tappable avatar with a camera badge for changing the photo.
+export function PhotoAvatar({ id, name, size = 72, onUpload, onRemove }: { id: string; name: string; size?: number; onUpload: (f: File) => Promise<unknown>; onRemove?: () => Promise<unknown> }) {
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const has = !!avatarPhotos[id];
+  const run = async (f: () => Promise<unknown>) => { setBusy(true); setError(null); try { await f(); } catch (e: any) { setError(e.message); } finally { setBusy(false); } };
+  return (
+    <View style={{ alignItems: 'center', gap: 6 }}>
+      <Pressable onPress={() => pickImage((f) => run(() => onUpload(f)))} accessibilityRole="button" accessibilityLabel={`${has ? 'Change' : 'Add'} photo of ${name}`} style={{ opacity: busy ? 0.5 : 1 }}>
+        <Avatar id={id} name={name} size={size} />
+        <View style={{ position: 'absolute', right: -2, bottom: -2, width: Math.max(24, size * 0.34), height: Math.max(24, size * 0.34), borderRadius: 99, backgroundColor: colors.primary, alignItems: 'center', justifyContent: 'center', borderWidth: 2, borderColor: colors.card }}>
+          <Icon name="camera" size={Math.max(13, size * 0.18)} color="#fff" />
+        </View>
+      </Pressable>
+      {busy ? <Text style={{ fontSize: 12, color: colors.muted }}>Uploading...</Text> : has && onRemove ? <Text onPress={() => run(onRemove)} style={{ fontSize: 12, color: colors.muted, textDecorationLine: 'underline' }}>Remove photo</Text> : null}
+      {!!error && <Text style={{ fontSize: 12, color: colors.danger, maxWidth: 200, textAlign: 'center' }}>{error}</Text>}
     </View>
   );
 }

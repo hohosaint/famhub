@@ -10,6 +10,29 @@ import { kindOf } from '../family';
 import { WhoIsOnlineCard } from '../WhoIsOnline';
 import { composeNext } from './UpdatesScreen';
 import { greeting, nameOf, PageHeader, run, ScreenProps, sgDayOf, sgTimeOf } from './shared';
+import { RoutineRow, routineToday, TickHost, useTick } from './RoutineScreen';
+
+// Infants: the routine items that need doing now (late ones, then the next one), ticked right here.
+function RoutineNow(props: ScreenProps) {
+  const { data, cid, refresh, go } = props;
+  const { ticking, setTicking, tick, error } = useTick(data, cid, refresh);
+  const t = routineToday(data);
+  const show = [...t.late.slice(-3), ...(t.next ? [t.next] : [])];
+  const after = t.next ? data.baby!.routine.filter((r) => r.time > t.next!.time && !t.doneOf(r).length).slice(0, 2) : [];
+  return (
+    <Card style={{ gap: 8 }}>
+      <Row style={{ justifyContent: 'space-between' }}>
+        <Overline>Routine · {t.count} of {t.total} done</Overline>
+        <Text style={s.link} onPress={() => go('care')}>Whole day</Text>
+      </Row>
+      {!show.length && <Muted>All done for today. Well done.</Muted>}
+      {show.map((r) => <RoutineRow key={r.id} data={data} cid={cid} item={r} done={t.doneOf(r)} next={t.next?.id === r.id} late={t.late.includes(r)} onTick={tick} refresh={refresh} />)}
+      {after.length > 0 && <Muted>Later: {after.map((r) => `${r.time} ${r.title}`).join(' · ')}</Muted>}
+      <ErrorText message={error} />
+      <TickHost data={data} cid={cid} refresh={refresh} item={ticking} onClose={() => setTicking(null)} />
+    </Card>
+  );
+}
 
 type TimelineItem = { key: string; time: string; icon: IconName; color: string; title: string; detail: string; done?: boolean; late?: boolean; action?: { label: string; onPress: () => void }; tab: string };
 
@@ -130,28 +153,9 @@ export default function TodayScreen(props: ScreenProps) {
         </Banner>
       )}
 
-      {data.baby ? (
-        <Card style={{ gap: 10 }}>
-          <Row style={{ justifyContent: 'space-between' }}><Overline>{data.baby.babies.length > 1 ? 'Babies today' : 'Baby today'}</Overline><Text style={s.link} onPress={() => go('care')}>Open the baby log</Text></Row>
-          {data.baby.babies.map((b) => {
-            const logs = data.baby!.logs.filter((l) => l.babyId === b.id && sgDayOf(l.at) === today);
-            const ml = logs.filter((l) => l.kind === 'bottle').reduce((a2, l) => a2 + (l.ml || 0), 0);
-            const kcal = logs.reduce((a2, l) => { if (l.kind === 'solids') return a2 + (l.macros ? l.macros.kcal : 0); if (l.kind !== 'bottle') return a2; const per = l.source === 'breastmilk' ? data.baby!.breastMilk : l.per100ml; return a2 + (per ? (per.kcal * (l.ml || 0)) / 100 : 0); }, 0);
-            const feeds = logs.filter((l) => l.kind === 'bottle' || l.kind === 'breast').length;
-            const diapers = logs.filter((l) => l.kind === 'diaper').length;
-            return (
-              <Row key={b.id} style={{ flexWrap: 'nowrap', gap: 10 }}>
-                <View style={{ width: 12, height: 12, borderRadius: 6, backgroundColor: b.color }} />
-                <Text style={{ fontWeight: '900', fontSize: 16, color: colors.text, minWidth: 64 }}>{b.name}</Text>
-                <Text style={{ flex: 1, color: colors.muted, fontWeight: '600' }}>{feeds} feeds · {ml} ml · {Math.round(kcal)} kcal · {diapers} diapers</Text>
-              </Row>
-            );
-          })}
-          <Button icon="water" label="Log a feed" onPress={() => go('care')} />
-        </Card>
-      ) : !data.circle.checkinBy ? null : (
+      {data.baby ? <RoutineNow {...props} /> : !data.circle.checkinBy ? null : (
         <Card style={[{ flexDirection: 'row', gap: 14, alignItems: 'center' }, lateCheckin ? { borderColor: colors.warnBorder, backgroundColor: colors.warnSoft } : checkedToday ? { borderColor: colors.okBorder, backgroundColor: colors.okSoft } : undefined]}>
-          <Avatar id={data.members.find((m) => m.role === 'parent')?.userId || 'parent'} name={parent} size={52} />
+          <Avatar id={data.members.find((m) => m.role === 'parent')?.userId || `person-${cid}`} name={parent} size={52} />
           <View style={{ flex: 1, gap: 2 }}>
             <Text style={{ fontSize: 18, fontWeight: '800' }}>{parent}</Text>
             <Text style={{ fontSize: 15, color: checkedToday ? colors.ok : lateCheckin ? colors.warn : colors.muted, fontWeight: '600' }}>

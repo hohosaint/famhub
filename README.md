@@ -1,9 +1,27 @@
-# Famhub web prototype (version 4.8)
+# Famhub web prototype (version 4.9)
 
 Famhub is the family eldercare coordination app.
 
 Open this folder in VS Code and follow "Famhub: Web Prototype Deployment Guide".
 No commands to type.
+
+## New in 4.9: simpler Infants tab and profile photos
+
+- Infants menu: Today, Routine, Calendar, Chat, More (Babies and Requests are gone from the menu).
+- Routine: the day's feeds, meals, naps, bath, vitamins and play, each with a time and the person who does it
+  (the helper by default). Tap Done: milk asks how many ml each baby drank (plus and minus 10), meals ask how
+  much was eaten, the rest tick at once. Undo is one tap. Milk and meals still feed the reports.
+- A starting routine is suggested for the baby's age (newborn, 1 to 3 months, 3 to 6, 6 to 12, over 12);
+  "Change routine" edits times, amounts, food and who does it, or resets to the suggestion.
+- The helper is reminded at each time; the family hears if something is not ticked 45 minutes later.
+- To do: a short job list under the routine (for example "Buy diapers"), with who does it.
+- Today shows the routine items due now, with Done buttons.
+- Calendar: "Add them to the calendar" adds the Singapore baby check-ups and National Childhood Immunisation
+  Schedule vaccinations (2, 4, 6, 12, 15 and 18 months) from the birth date, to change to the booked times.
+- Feeding details, growth, nutrition and reports are still there: Routine (bottom links) or More.
+- Photos: tap your picture in More > My profile to add a photo; baby photos on the Routine page or My profile;
+  a photo of the parent, kid or teen in My profile. Photos show everywhere in place of initials.
+- Helpers can now save a PayNow / PayLah! mobile (for helper pay).
 
 ## New in 4.8: payments with PayNow and PayLah!
 

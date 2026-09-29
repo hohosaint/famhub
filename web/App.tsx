@@ -3,7 +3,7 @@ import { ActivityIndicator, Platform, Pressable, ScrollView, StyleSheet, Text, V
 import { StatusBar } from 'expo-status-bar';
 import { APP_VERSION, getWindowToken, setWindowToken, api, CircleData, Inbox, Notice, roleLabel, Session, signOut } from './src/api';
 import { colors, shadow } from './src/theme';
-import { Avatar, Button, ErrorText, Gradient, Icon, IconButton, IconName, Row, Sheet, ListItem } from './src/ui';
+import { Avatar, setAvatarPhotos, Button, ErrorText, Gradient, Icon, IconButton, IconName, Row, Sheet, ListItem } from './src/ui';
 import { addInstallTags, currentSubscription, registerServiceWorker } from './src/push';
 import TodayScreen from './src/screens/TodayScreen';
 import CalendarScreen from './src/screens/CalendarScreen';
@@ -14,6 +14,7 @@ import MoreScreen from './src/screens/MoreScreen';
 import InboxScreen, { CATEGORY_ICON } from './src/screens/InboxScreen';
 import NotifySettingsScreen from './src/screens/NotifySettingsScreen';
 import PaymentsScreen from './src/screens/PaymentsScreen';
+import RoutineScreen, { routineToday } from './src/screens/RoutineScreen';
 import CostsScreen from './src/screens/CostsScreen';
 import DocumentsScreen from './src/screens/DocumentsScreen';
 import RenewalsScreen from './src/screens/RenewalsScreen';
@@ -45,7 +46,7 @@ const NAV: { key: string; label: string; icon: IconName; iconOn: IconName }[] = 
   { key: 'updates', label: 'Updates', icon: 'chatbubbles-outline', iconOn: 'chatbubbles' },
   { key: 'more', label: 'More', icon: 'grid-outline', iconOn: 'grid' },
 ];
-const SUB_TITLES: Record<string, string> = { appearance: 'Appearance', visits: 'Visit notes', repeats: 'Repeating items', costs: 'Costs', payments: 'Payments', docs: 'Documents', renewals: 'Renewals', circle: 'Circle and people', activity: 'Activity log', me: 'My profile' };
+const SUB_TITLES: Record<string, string> = { appearance: 'Appearance', visits: 'Visit notes', repeats: 'Repeating items', costs: 'Costs', payments: 'Payments', nutrition: 'Feeding details and growth', docs: 'Documents', renewals: 'Renewals', circle: 'Circle and people', activity: 'Activity log', me: 'My profile' };
 
 // Test mode: act as any demo person to try each role.
 // Shows a system notification from the open app when alerts are allowed, so an urgent alert
@@ -109,6 +110,7 @@ export default function App() {
   const loadSession = useCallback(async (): Promise<Session | null> => {
     try {
       const s = await api.session();
+      setAvatarPhotos({ [s.user.id]: s.user.photo || undefined, ...Object.fromEntries(s.circles.map((c) => [`person-${c.id}`, c.photo || undefined])) });
       setSession(s); setError(null); setSignedOut(false);
       setCid((cur) => (cur && s.circles.some((c) => c.id === cur) ? cur : s.circles[0]?.id || null));
       return s;
@@ -121,7 +123,7 @@ export default function App() {
 
   const refresh = useCallback(async () => {
     if (!cid) return;
-    try { setData(await api.circle(cid)); setError(null); }
+    try { const d = await api.circle(cid); setAvatarPhotos({ ...Object.fromEntries(d.members.map((m) => [m.userId, undefined])), ...(d.baby ? Object.fromEntries(d.baby.babies.map((b) => [b.id, undefined])) : {}), [`person-${cid}`]: undefined, ...(d.photos || {}) }); setData(d); setError(null); }
     catch (e: any) { setData(null); await loadSession(); setError(e?.message || String(e)); }
   }, [cid, loadSession]);
 
@@ -380,14 +382,14 @@ export default function App() {
 
   const back = (title: string) => (
     <View style={{ gap: 6 }}>
-      <Pressable onPress={() => go('more')} style={{ flexDirection: 'row', alignItems: 'center', gap: 4 }} accessibilityRole="link"><Icon name="chevron-back" size={20} color={colors.primary} /><Text style={{ color: colors.primary, fontWeight: '700', fontSize: 15 }}>More</Text></Pressable>
+      <Pressable onPress={() => go(current === 'nutrition' ? 'care' : 'more')} style={{ flexDirection: 'row', alignItems: 'center', gap: 4 }} accessibilityRole="link"><Icon name="chevron-back" size={20} color={colors.primary} /><Text style={{ color: colors.primary, fontWeight: '700', fontSize: 15 }}>{current === 'nutrition' ? 'Routine' : 'More'}</Text></Pressable>
       <PageHeader title={title} />
     </View>
   );
-  const allowed = new Set(['home', 'calendar', 'care', 'requests', 'updates', 'more', 'inbox', 'notify', 'docs', 'circle', 'activity', 'me', 'repeats', 'visits', 'launch', 'profile', 'appearance', 'payments', ...(data.baby ? ['babyreport'] : []), ...(data.can.seeMoney ? ['costs'] : []), ...(data.can.seeRenewals ? ['renewals'] : [])]);
+  const allowed = new Set(['home', 'calendar', 'care', 'requests', 'updates', 'more', 'inbox', 'notify', 'docs', 'circle', 'activity', 'me', 'repeats', 'visits', 'launch', 'profile', 'appearance', 'payments', ...(data.baby ? ['babyreport', 'nutrition'] : []), ...(data.can.seeMoney ? ['costs'] : []), ...(data.can.seeRenewals ? ['renewals'] : [])]);
   const current = allowed.has(tab) ? tab : 'home';
   const screens: Record<string, React.ReactNode> = {
-    home: <TodayScreen {...props} />, calendar: <CalendarScreen {...props} />, care: data.baby ? <BabyScreen {...props} /> : <CareScreen {...props} />, requests: <RequestsScreen {...props} />,
+    home: <TodayScreen {...props} />, calendar: <CalendarScreen {...props} />, care: data.baby ? <RoutineScreen {...props} /> : <CareScreen {...props} />, nutrition: data.baby ? <BabyScreen {...props} /> : null, requests: <RequestsScreen {...props} />,
     updates: <UpdatesScreen {...props} />, more: <MoreScreen {...props} />, inbox: inboxScreen, notify: <NotifySettingsScreen onPushChange={setPushOn} />,
     costs: <CostsScreen {...props} />, payments: <PaymentsScreen {...props} />, docs: <DocumentsScreen {...props} />, renewals: <RenewalsScreen {...props} />, circle: <CircleScreen key={cid} {...props} />,
     activity: <ActivityScreen {...props} />, me: <MeScreen {...props} />, repeats: <RepeatsScreen {...props} />, visits: <VisitsScreen {...props} />,
@@ -396,18 +398,20 @@ export default function App() {
     launch: <LaunchWizard key={launchKind || 'any'} initialKind={launchKind} onCancel={() => go('home')} onDone={async (id) => { await loadSession(); setLaunchKind(undefined); setCid(id); go('home'); }} />,
     profile: <LaunchWizard edit={{ cid, profile: data.circle.profile || null, checkinBy: data.circle.checkinBy, name: data.circle.parentName }} onCancel={() => go('more')} onDone={async () => { await refresh(); go('home'); }} />,
   };
-  const navKey = NAV.some((n) => n.key === current) ? current : ['inbox'].includes(current) ? '' : 'more';
+  // Infants (4.9): Today, Routine, Calendar, Chat, More. Requests live inside Routine as the to-do list.
+  const nav = data.baby ? [NAV[0], { key: 'care', label: 'Routine', icon: 'list-outline' as IconName, iconOn: 'list' as IconName }, NAV[1], { ...NAV[4], label: 'Chat' }, NAV[5]] : NAV;
+  const navKey = nav.some((n) => n.key === current) ? current : ['inbox'].includes(current) ? '' : current === 'nutrition' || current === 'babyreport' ? 'care' : 'more';
   const content = emptyKind ? <EmptyKind kind={emptyKind} onSetup={() => addKind(emptyKind)} /> : SUB_TITLES[current] ? <View style={{ gap: 16 }}>{back(SUB_TITLES[current])}{screens[current]}</View> : current === 'notify' ? <View style={{ gap: 6 }}><Pressable onPress={() => go('more')} style={{ flexDirection: 'row', alignItems: 'center', gap: 4 }}><Icon name="chevron-back" size={20} color={colors.primary} /><Text style={{ color: colors.primary, fontWeight: '700', fontSize: 15 }}>More</Text></Pressable>{screens.notify}</View> : screens[current];
 
   return page(content,
     <View style={styles.nav} accessibilityRole="tablist" onLayout={(e) => setNavWidth(e.nativeEvent.layout.width)}>
       <NavPresenceLayer people={people} width={navWidth} />
-      {NAV.map((n) => {
+      {nav.map((n) => {
         const on = navKey === n.key;
-        const count = n.key === 'requests' ? data.tasks.filter((t) => t.status === 'open' && t.assigneeUserId === data.me.userId).length : n.key === 'care' && !data.baby ? data.dosesToday.filter((d) => d.status === 'missed' || d.status === 'due').length : 0;
+        const count = n.key === 'requests' ? data.tasks.filter((t) => t.status === 'open' && t.assigneeUserId === data.me.userId).length : n.key === 'care' && !data.baby ? data.dosesToday.filter((d) => d.status === 'missed' || d.status === 'due').length : n.key === 'care' && data.baby ? routineToday(data).late.length : 0;
         const kk = kindOf(currentKind);
-        const label = n.key === 'care' ? (data.baby && data.baby.babies.length > 1 ? 'Babies' : kk.careTab) : n.label;
-        const ic = n.key === 'care' ? { icon: kk.careIcon, iconOn: kk.careIconOn } : n;
+        const label = n.key === 'care' && !data.baby ? kk.careTab : n.label;
+        const ic = n.key === 'care' && !data.baby ? { icon: kk.careIcon, iconOn: kk.careIconOn } : n;
         return (
           <Pressable key={n.key} onPress={() => go(n.key)} accessibilityRole="tab" accessibilityState={{ selected: on }} accessibilityLabel={label} style={[styles.navItem, on && styles.navItemOn]}>
             <View>
