@@ -1,6 +1,7 @@
 import { useMemo, useState } from 'react';
 import { Pressable, Text, TextInput, View } from 'react-native';
-import { api, Baby, BabyData, FoodItem, Macros } from '../api';
+import { api, Baby, BabyData, BabyLog, FoodItem, Macros } from '../api';
+import { suggestTargets } from '../babyTargets';
 import { colors } from '../theme';
 import { Button, Card, Choice, ErrorText, Field, Icon, Muted, Overline, Row, Segmented, Sheet, s } from '../ui';
 import { run, ScreenProps } from './shared';
@@ -203,17 +204,41 @@ export function MealBuilder({ bd, lines, setLines, openLibrary }: { bd: BabyData
   );
 }
 
-// Daily targets per baby (from the doctor or dietitian); all optional.
-export function TargetsEditor({ baby, value, onChange }: { baby: Baby; value: Record<string, string>; onChange: (v: Record<string, string>) => void }) {
+// Daily targets per baby: automatic (from weight, length, sex and age, using published formulas) or the family's own.
+export function TargetsEditor({ baby, logs, mode, setMode, value, onChange }: {
+  baby: Baby; logs: BabyLog[]; mode: 'auto' | 'manual'; setMode: (m: 'auto' | 'manual') => void; value: Record<string, string>; onChange: (v: Record<string, string>) => void;
+}) {
+  const sug = suggestTargets(baby, logs);
+  const fill = () => { if (sug.ok) onChange(Object.fromEntries(Object.entries(sug.s.targets).map(([k, v]) => [k, v === null ? '' : String(v)]))); };
   return (
-    <View style={{ gap: 6 }}>
-      <Text style={s.label}>Daily targets for {baby.name} (optional)</Text>
-      <Row>
-        {([['ml', 'Milk (ml)'], ['kcal', 'Energy (kcal)'], ['protein', 'Protein (g)'], ['fat', 'Fat (g)'], ['carbs', 'Carbs (g)']] as const).map(([k, l]) => (
-          <View key={k} style={{ flex: 1, minWidth: 64 }}><Field label={l} value={value[k] || ''} onChange={(x) => onChange({ ...value, [k]: x })} keyboard="decimal-pad" /></View>
-        ))}
-      </Row>
-      <Muted>Use the amounts your doctor, nurse or dietitian gave you. Leave empty to hide the progress bars.</Muted>
+    <View style={{ gap: 8 }}>
+      <Text style={s.label}>Daily targets for {baby.name}</Text>
+      <Choice value={mode} onChange={(m) => { setMode(m); if (m === 'manual' && !Object.values(value).some(Boolean)) fill(); }}
+        options={[{ value: 'auto', label: 'Automatic (recommended)' }, { value: 'manual', label: 'Set my own' }]} />
+      {sug.ok ? (
+        <View style={{ gap: 6, padding: 12, borderRadius: 14, backgroundColor: colors.accentSoft, borderWidth: 1, borderColor: colors.accentBorder }}>
+          <Text style={{ fontWeight: '900', color: colors.text }}>Suggested for {baby.name} today</Text>
+          <MacroRow m={{ kcal: sug.s.targets.kcal || 0, protein: sug.s.targets.protein || 0, fat: sug.s.targets.fat || 0, carbs: sug.s.targets.carbs || 0 }} />
+          {sug.s.targets.ml ? <Text style={{ fontWeight: '700', color: '#2563EB' }}>Milk about {sug.s.targets.ml} ml a day</Text> : <Muted>From 6 months milk and food share the energy, so no milk amount is suggested.</Muted>}
+          <Muted>Based on {sug.s.basis.ageText} old, {sug.s.basis.kg} kg{sug.s.basis.cm ? `, ${sug.s.basis.cm} cm` : ''}{sug.s.basis.sex ? `, ${sug.s.basis.sex}` : ''}. Energy: {sug.s.basis.method === 'NASEM 2023' ? 'National Academies (NASEM 2023) equation using age, length, weight and sex' : 'Institute of Medicine (2005) equation using age and weight; add the length and sex for the newer equation'}. Protein, fat and carbs: Dietary Reference Intakes for this age.</Muted>
+          {mode === 'auto' ? <Muted>Automatic targets update by themselves each time you log a new weight or length.</Muted> : <Button small kind="secondary" icon="copy-outline" label="Copy the suggestion into my targets" onPress={fill} />}
+        </View>
+      ) : (
+        <View style={{ padding: 12, borderRadius: 14, backgroundColor: colors.warnSoft }}>
+          <Text style={{ color: colors.warnText, fontWeight: '700' }}>To suggest targets, add {sug.missing.join(' and ')}{sug.missing.includes('weight') ? ' (Log > Weight)' : ''}. Adding the length and boy or girl gives the most accurate estimate.</Text>
+        </View>
+      )}
+      {mode === 'manual' && (
+        <>
+          <Row>
+            {([['ml', 'Milk (ml)'], ['kcal', 'Energy (kcal)'], ['protein', 'Protein (g)'], ['fat', 'Fat (g)'], ['carbs', 'Carbs (g)']] as const).map(([k, l]) => (
+              <View key={k} style={{ flex: 1, minWidth: 64 }}><Field label={l} value={value[k] || ''} onChange={(x) => onChange({ ...value, [k]: x })} keyboard="decimal-pad" /></View>
+            ))}
+          </Row>
+          <Muted>Use the amounts your doctor, nurse or dietitian gave you. Leave a box empty to hide that progress bar.</Muted>
+        </>
+      )}
+      <Muted>Estimates for healthy babies born at term. For a premature baby or a medical condition, use your doctor's or dietitian's targets. Famhub does not give feeding advice.</Muted>
     </View>
   );
 }

@@ -6,6 +6,7 @@ import { colors, personColor } from '../theme';
 import { TimeField } from '../TimeWheel';
 import { Badge, Button, Card, Choice, Empty, ErrorText, Field, Gradient, Icon, IconName, Muted, Overline, Row, Sheet, s } from '../ui';
 import { nameOf, run, ScreenProps } from './shared';
+import { effectiveTargets } from '../babyTargets';
 import { allFoods, FoodLibrarySheet, MacroRow, MealBuilder, MealLine, TargetBar, TargetsEditor } from './BabyFood';
 
 // Baby log for one baby, twins or triplets: feeds (bottle, breast, pumped, solids), sleep, diapers and growth,
@@ -496,16 +497,16 @@ export default function BabyScreen(props: ScreenProps) {
           </View>
           {t.meals > 0 && <Muted>Food: {t.meals} item{t.meals === 1 ? '' : 's'}, {Math.round(t.foodG)} g, {Math.round(t.foodKcal)} kcal · Milk: {Math.round(t.kcal - t.foodKcal)} kcal</Muted>}
           {t.breastMin > 0 && <Muted>Plus {t.breastMin} min of breastfeeding (not counted in ml or nutrients).</Muted>}
-          {!!single.targets && (
+          {(() => { const et = effectiveTargets(single, bd.logs).targets; return !!et && (
             <View style={{ gap: 8, padding: 12, borderRadius: 16, backgroundColor: colors.surfaceAlt }}>
-              <Overline>Daily targets</Overline>
-              {single.targets.ml ? <TargetBar label="Milk" value={t.ml} target={single.targets.ml} unit="ml" color="#2563EB" /> : null}
-              {single.targets.kcal ? <TargetBar label="Energy" value={t.kcal} target={single.targets.kcal} unit="kcal" color="#C2410C" /> : null}
-              {single.targets.protein ? <TargetBar label="Protein" value={t.protein} target={single.targets.protein} unit="g" color="#7C3AED" /> : null}
-              {single.targets.fat ? <TargetBar label="Fat" value={t.fat} target={single.targets.fat} unit="g" color="#B45309" /> : null}
-              {single.targets.carbs ? <TargetBar label="Carbs" value={t.carbs} target={single.targets.carbs} unit="g" color="#0E7490" /> : null}
+              <Overline>Daily targets{single.targetsMode === 'auto' ? ' (automatic)' : ''}</Overline>
+              {et.ml ? <TargetBar label="Milk" value={t.ml} target={et.ml} unit="ml" color="#2563EB" /> : null}
+              {et.kcal ? <TargetBar label="Energy" value={t.kcal} target={et.kcal} unit="kcal" color="#C2410C" /> : null}
+              {et.protein ? <TargetBar label="Protein" value={t.protein} target={et.protein} unit="g" color="#7C3AED" /> : null}
+              {et.fat ? <TargetBar label="Fat" value={t.fat} target={et.fat} unit="g" color="#B45309" /> : null}
+              {et.carbs ? <TargetBar label="Carbs" value={t.carbs} target={et.carbs} unit="g" color="#0E7490" /> : null}
             </View>
-          )}
+          ); })()}
         </>; })() : (
           <View accessibilityLabel="Babies side by side" style={{ borderRadius: 16, borderWidth: 1, borderColor: colors.border, overflow: 'hidden' }}>
             <View style={{ flexDirection: 'row', backgroundColor: colors.surfaceAlt }}>
@@ -522,6 +523,16 @@ export default function BabyScreen(props: ScreenProps) {
         )}
         <Muted>Nutrients come from the milk's values per 100 ml and the food's values per 100 g (typical values until you enter your own). Famhub does not give feeding advice; ask your doctor or nurse.</Muted>
       </Card>
+
+      <Pressable onPress={() => props.go('babyreport')} accessibilityRole="button" accessibilityLabel="Open reports: daily, weekly, monthly or chosen dates"
+        style={({ pressed }) => ({ flexDirection: 'row', alignItems: 'center', gap: 12, padding: 16, borderRadius: 20, backgroundColor: colors.card, borderWidth: 1.5, borderColor: colors.accentBorder, transform: [{ scale: pressed ? 0.98 : 1 }] })}>
+        <View style={{ width: 44, height: 44, borderRadius: 14, backgroundColor: colors.accentSoft, alignItems: 'center', justifyContent: 'center' }}><Icon name="bar-chart" size={24} color={colors.accent} /></View>
+        <View style={{ flex: 1 }}>
+          <Text style={{ fontWeight: '900', fontSize: 16, color: colors.text }}>Reports</Text>
+          <Text style={{ fontSize: 13, color: colors.muted }}>Daily, weekly, monthly or ticked dates: energy, protein, fat, carbs, milk, sleep, diapers and growth. Download or print.</Text>
+        </View>
+        <Icon name="chevron-forward" size={20} color={colors.faint} />
+      </Pressable>
 
       <Card style={{ gap: 6 }}>
         <Overline>Milk per day (last 7 days)</Overline>
@@ -555,7 +566,7 @@ export default function BabyScreen(props: ScreenProps) {
               </View>
               <Button small kind="secondary" icon="swap-horizontal" label={b.formula ? 'Change' : 'Choose'} onPress={() => setFormulaFor(b)} />
             </Row>
-            {!!b.targets && <Muted>Daily targets: {[b.targets.ml && `${b.targets.ml} ml`, b.targets.kcal && `${b.targets.kcal} kcal`, b.targets.protein && `protein ${b.targets.protein} g`, b.targets.fat && `fat ${b.targets.fat} g`, b.targets.carbs && `carbs ${b.targets.carbs} g`].filter(Boolean).join(' · ')}</Muted>}
+            {(() => { const et = effectiveTargets(b, bd.logs).targets; return !!et && <Muted>Daily targets{b.targetsMode === 'auto' ? ' (automatic)' : ''}: {[et.ml && `${et.ml} ml`, et.kcal && `${et.kcal} kcal`, et.protein && `protein ${et.protein} g`, et.fat && `fat ${et.fat} g`, et.carbs && `carbs ${et.carbs} g`].filter(Boolean).join(' · ')}</Muted>; })()}
             {b.formula ? <>
               <Muted>Per 100 ml: {b.formula.per100ml.kcal} kcal · protein {b.formula.per100ml.protein} g · fat {b.formula.per100ml.fat} g · carbs {b.formula.per100ml.carbs} g</Muted>
               {b.formula.typical && <Badge label="Typical values: check the tin" tone="warn" />}
@@ -608,6 +619,7 @@ export default function BabyScreen(props: ScreenProps) {
 function BabySettings({ props, bd, close }: { props: ScreenProps; bd: BabyData; close: () => void }) {
   const { cid, refresh } = props;
   const [edits, setEdits] = useState<Record<string, { name: string; birthDate: string; sex: string }>>(() => Object.fromEntries(bd.babies.map((b) => [b.id, { name: b.name, birthDate: b.birthDate || '', sex: b.sex || '' }])));
+  const [modes, setModes] = useState<Record<string, 'auto' | 'manual'>>(() => Object.fromEntries(bd.babies.map((b) => [b.id, b.targetsMode === 'auto' ? 'auto' : 'manual'])));
   const [targets, setTargets] = useState<Record<string, Record<string, string>>>(() => Object.fromEntries(bd.babies.map((b) => [b.id, Object.fromEntries(Object.entries(b.targets || {}).map(([k, v]) => [k, v === null || v === undefined ? '' : String(v)]))])));
   const [feedEvery, setFeedEvery] = useState(String(bd.feedEvery ?? 3));
   const [newName, setNewName] = useState('');
@@ -615,7 +627,7 @@ function BabySettings({ props, bd, close }: { props: ScreenProps; bd: BabyData; 
   const [error, setError] = useState<string | null>(null);
   const saveAll = async () => {
     const ok = await run(async () => {
-      for (const b of bd.babies) await api.updateBaby(cid, { babyId: b.id, ...edits[b.id], targets: targets[b.id] || {} });
+      for (const b of bd.babies) await api.updateBaby(cid, { babyId: b.id, ...edits[b.id], targetsMode: modes[b.id], targets: targets[b.id] || {} });
       await api.updateBaby(cid, { babyId: bd.babies[0].id, feedEvery: Number(feedEvery) });
     }, refresh, setError);
     if (ok) close();
@@ -631,7 +643,7 @@ function BabySettings({ props, bd, close }: { props: ScreenProps; bd: BabyData; 
           <Field label="Name" value={edits[b.id]?.name || ''} onChange={(v) => setEdits((e) => ({ ...e, [b.id]: { ...e[b.id], name: v } }))} />
           <DatePicker label="Birth date" value={edits[b.id]?.birthDate || ''} onChange={(v) => setEdits((e) => ({ ...e, [b.id]: { ...e[b.id], birthDate: v } }))} />
           <Choice label="Baby is a" value={edits[b.id]?.sex || ''} onChange={(v) => setEdits((e) => ({ ...e, [b.id]: { ...e[b.id], sex: v } }))} options={[{ value: 'boy', label: 'Boy' }, { value: 'girl', label: 'Girl' }]} />
-          <TargetsEditor baby={b} value={targets[b.id] || {}} onChange={(v) => setTargets((t) => ({ ...t, [b.id]: v }))} />
+          <TargetsEditor baby={{ ...b, ...edits[b.id] } as Baby} logs={bd.logs.filter((l) => l.babyId === b.id)} mode={modes[b.id]} setMode={(m) => setModes((x) => ({ ...x, [b.id]: m }))} value={targets[b.id] || {}} onChange={(v) => setTargets((t) => ({ ...t, [b.id]: v }))} />
         </Card>
       ))}
       <Choice label="Remind everyone when a feed is due, after" value={feedEvery} onChange={setFeedEvery} options={[{ value: '0', label: 'No reminder' }, ...[2, 2.5, 3, 3.5, 4, 5].map((h) => ({ value: String(h), label: `${h} hours` }))]} />

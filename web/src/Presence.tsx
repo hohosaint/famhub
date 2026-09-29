@@ -18,7 +18,7 @@ export type Present = { userId: string; name: string; role: string; tab: string;
 export const PAGE_LABEL: Record<string, string> = {
   home: 'Today', calendar: 'Calendar', care: 'Care', requests: 'Requests', updates: 'Updates', more: 'More',
   inbox: 'Notifications', notify: 'Notification settings', costs: 'Costs', docs: 'Documents', renewals: 'Renewals',
-  circle: 'Circle and people', activity: 'Activity log', me: 'My profile', photos: 'Photos', repeats: 'Repeating items', visits: 'Visit notes', launch: 'Setting up someone new', profile: 'Care profile', appearance: 'Appearance',
+  circle: 'Circle and people', activity: 'Activity log', me: 'My profile', photos: 'Photos', repeats: 'Repeating items', visits: 'Visit notes', launch: 'Setting up someone new', profile: 'Care profile', appearance: 'Appearance', babyreport: 'Baby reports',
 };
 export const NAV_KEYS = ['home', 'calendar', 'care', 'requests', 'updates', 'more'];
 // Pages reached from More count as "More" in the bottom bar.

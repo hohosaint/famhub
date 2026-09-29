@@ -1,4 +1,4 @@
-// Famhub web prototype 4.6: serves the web app (public/) and the API (/api/*).
+// Famhub web prototype 4.7: serves the web app (public/) and the API (/api/*).
 // Full-featured test version: roles, invites, calendar, tasks, notes, medicines,
 // costs with statements and PayNow, documents, renewals, check-ins and alerts.
 
@@ -103,7 +103,7 @@ function find(list, id, circleId, what) {
 // ---------- session, test mode ----------
 
 // When this version was built (the web pages) and when the server started, shown in the app under the profile button.
-const APP_VERSION = '4.6';
+const APP_VERSION = '4.7';
 const STARTED_AT = new Date().toISOString();
 let BUILT_AT = '';
 try { BUILT_AT = fs.statSync(path.join(__dirname, 'public', 'index.html')).mtime.toISOString(); } catch { /* no pages yet */ }
@@ -712,7 +712,7 @@ app.patch('/api/circles/:circleId/appointments/:id', wrap(async (req, res) => {
 const presence = new Map();   // key circleId|userId|clientId -> { circleId, userId, clientId, tab, doing, typing, at, since, trail }
 const streams = new Set();    // { res, circleId, userId, clientId }
 const PRESENCE_TTL = 35000;
-const PAGES = ['home', 'calendar', 'care', 'launch', 'requests', 'updates', 'more', 'inbox', 'notify', 'costs', 'docs', 'renewals', 'circle', 'activity', 'me', 'photos', 'repeats', 'visits', 'profile', 'appearance'];
+const PAGES = ['home', 'calendar', 'care', 'launch', 'requests', 'updates', 'more', 'inbox', 'notify', 'costs', 'docs', 'renewals', 'circle', 'activity', 'me', 'photos', 'repeats', 'visits', 'profile', 'appearance', 'babyreport'];
 
 // Everyone else: never the viewer themselves, and never the viewer's own window.
 function presenceFor(state, circleId, viewerId, viewerClientId = '') {
@@ -900,11 +900,11 @@ function babyFormula(b, circle) {
   return f || b.per100ml ? { id: f ? f.id : 'custom', name: f ? f.name : (b.customName || 'My formula'), brand: f ? f.brand : '', stageLabel: f ? f.stageLabel : '', per100ml, typical: !b.per100ml && !!f && f.typical } : null;
 }
 
-function babyView(state, circle) {
-  const since = new Date(Date.now() - 30 * 86400e3).toISOString();
+// Baby log entries for this circle, oldest data made complete (baby id and bottle nutrition).
+function babyLogsWhere(state, circle, keep) {
   const babies = babiesOf(circle);
   const first = babies[0].id;
-  const logs = (state.babyLogs || []).filter((x) => x.circleId === circle.id && (x.at >= since || ['weight', 'height', 'head'].includes(x.kind)))
+  return (state.babyLogs || []).filter((x) => x.circleId === circle.id && keep(x))
     .map((x) => {
       const y = x.babyId ? x : { ...x, babyId: first };
       // A formula bottle saved without nutrition (older data) uses that baby's current formula.
@@ -914,10 +914,35 @@ function babyView(state, circle) {
       }
       return y;
     }).sort((a, b) => b.at.localeCompare(a.at));
+}
+
+function babyView(state, circle) {
+  const since = new Date(Date.now() - 30 * 86400e3).toISOString();
+  const babies = babiesOf(circle);
+  const logs = babyLogsWhere(state, circle, (x) => x.at >= since || ['weight', 'height', 'head'].includes(x.kind));
   const feedEvery = (circle.baby && circle.baby.feedEvery) || 0;
   return { babies: babies.map((b) => ({ ...b, formula: babyFormula(b, circle), targets: b.targets || null })), feedEvery, breastMilk: F.BREAST_MILK, logs,
     myFoods: myFoods(circle), presetFoods: BF.FOODS };
 }
+
+// Reports: every log between two Singapore dates (up to about 13 months), plus all growth entries.
+app.get('/api/circles/:circleId/baby/report', wrap(async (req, res) => {
+  const { member, state } = await memberOf(req, req.params.circleId);
+  const circle = state.circles.find((c) => c.id === member.circleId);
+  if (!circle || !(circle.profile && circle.profile.careFor === 'baby')) fail(400, 'This circle has no baby log.');
+  const from = isDay(req.query.from) ? req.query.from : null;
+  const to = isDay(req.query.to) ? req.query.to : null;
+  if (!from || !to || from > to) fail(400, 'Choose the dates for the report.');
+  const start = new Date(`${from}T00:00:00+08:00`).getTime();
+  const end = new Date(`${to}T00:00:00+08:00`).getTime() + 86400e3;
+  if ((end - start) / 86400e3 > 400) fail(400, 'A report can cover up to 400 days.');
+  // Sleep that started the evening before still counts on the first day.
+  const startIso = new Date(start - 86400e3).toISOString(); const endIso = new Date(end).toISOString();
+  const logs = babyLogsWhere(state, circle, (x) => (x.at >= startIso && x.at < endIso) || ['weight', 'height', 'head'].includes(x.kind));
+  const babies = babiesOf(circle).map((b) => ({ id: b.id, name: b.name, color: b.color, birthDate: b.birthDate, sex: b.sex || '', targetsMode: b.targetsMode || 'manual', targets: b.targets || null, formula: babyFormula(b, circle) }));
+  res.json({ from, to, babies, breastMilk: F.BREAST_MILK, logs, parentName: circle.parentName });
+}));
+
 function findBaby(circle, id) {
   const list = babiesOf(circle);
   const b = id ? list.find((x) => x.id === id) : list[0];
@@ -977,6 +1002,8 @@ app.patch('/api/circles/:circleId/baby', wrap(async (req, res) => {
     if (req.body.birthDate !== undefined) b.birthDate = isDay(req.body.birthDate) ? req.body.birthDate : '';
     if (req.body.sex !== undefined) b.sex = ['boy', 'girl'].includes(req.body.sex) ? req.body.sex : '';
     if (req.body.formulaId !== undefined) { b.formulaId = pickFormula(req.body.formulaId, circle); b.per100ml = null; }
+    // Automatic targets (worked out in the app from weight, length, sex and age) or the family's own.
+    if (req.body.targetsMode !== undefined) b.targetsMode = req.body.targetsMode === 'auto' ? 'auto' : 'manual';
     // Daily targets the family set (for example from the doctor or dietitian); empty clears them.
     if (req.body.targets !== undefined) {
       const t = req.body.targets || {};

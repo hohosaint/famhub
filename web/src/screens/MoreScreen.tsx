@@ -36,7 +36,7 @@ export default function MoreScreen({ data, go }: ScreenProps) {
       <Card style={{ paddingVertical: 4, gap: 0 }}>
         <ListItem icon="log-out-outline" iconColor={colors.danger} title="Sign out" onPress={() => signOut()} />
       </Card>
-      <Row><Overline>Famhub 4.6</Overline></Row>
+      <Row><Overline>Famhub 4.7</Overline></Row>
     </View>
   );
 }

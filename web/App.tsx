@@ -28,6 +28,7 @@ import { lastCursorX, setCursor, setScroll } from './src/doing';
 import ParentScreen, { ParentPhotos } from './src/screens/ParentScreen';
 import OnboardingScreen from './src/screens/OnboardingScreen';
 import BabyScreen from './src/screens/BabyScreen';
+import BabyReportScreen from './src/screens/BabyReportScreen';
 import LaunchWizard from './src/screens/LaunchWizard';
 import AppearanceSettings, { DarkToggle } from './src/Appearance';
 import FamilyTabs, { EmptyKind, lastCircle, rememberCircle } from './src/FamilyTabs';
@@ -382,7 +383,7 @@ export default function App() {
       <PageHeader title={title} />
     </View>
   );
-  const allowed = new Set(['home', 'calendar', 'care', 'requests', 'updates', 'more', 'inbox', 'notify', 'docs', 'circle', 'activity', 'me', 'repeats', 'visits', 'launch', 'profile', 'appearance', ...(data.can.seeMoney ? ['costs'] : []), ...(data.can.seeRenewals ? ['renewals'] : [])]);
+  const allowed = new Set(['home', 'calendar', 'care', 'requests', 'updates', 'more', 'inbox', 'notify', 'docs', 'circle', 'activity', 'me', 'repeats', 'visits', 'launch', 'profile', 'appearance', ...(data.baby ? ['babyreport'] : []), ...(data.can.seeMoney ? ['costs'] : []), ...(data.can.seeRenewals ? ['renewals'] : [])]);
   const current = allowed.has(tab) ? tab : 'home';
   const screens: Record<string, React.ReactNode> = {
     home: <TodayScreen {...props} />, calendar: <CalendarScreen {...props} />, care: data.baby ? <BabyScreen {...props} /> : <CareScreen {...props} />, requests: <RequestsScreen {...props} />,
@@ -390,6 +391,7 @@ export default function App() {
     costs: <CostsScreen {...props} />, docs: <DocumentsScreen {...props} />, renewals: <RenewalsScreen {...props} />, circle: <CircleScreen key={cid} {...props} />,
     activity: <ActivityScreen {...props} />, me: <MeScreen {...props} />, repeats: <RepeatsScreen {...props} />, visits: <VisitsScreen {...props} />,
     appearance: <AppearanceSettings />,
+    babyreport: data.baby ? <BabyReportScreen {...props} /> : null,
     launch: <LaunchWizard key={launchKind || 'any'} initialKind={launchKind} onCancel={() => go('home')} onDone={async (id) => { await loadSession(); setLaunchKind(undefined); setCid(id); go('home'); }} />,
     profile: <LaunchWizard edit={{ cid, profile: data.circle.profile || null, checkinBy: data.circle.checkinBy, name: data.circle.parentName }} onCancel={() => go('more')} onDone={async () => { await refresh(); go('home'); }} />,
   };

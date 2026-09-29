@@ -45,7 +45,8 @@ export type BabyLog = { id: string; babyId: string; kind: 'bottle' | 'breast' | 
 export type BabyFormula = { id: string; name: string; brand: string; stageLabel: string; per100ml: Macros; typical: boolean };
 export type Targets = { kcal: number | null; protein: number | null; fat: number | null; carbs: number | null; ml: number | null };
 export type FoodItem = { id: string; kind: 'milk' | 'food'; unit: 'ml' | 'g'; name: string; brand?: string; group: string; per100: Macros; typical?: boolean; preset?: boolean; custom?: boolean };
-export type Baby = { id: string; name: string; sex: string; birthDate: string; formulaId: string; per100ml: Macros | null; customName: string; color: string; formula: BabyFormula | null; targets: Targets | null };
+export type Baby = { id: string; name: string; sex: string; birthDate: string; formulaId: string; per100ml: Macros | null; customName: string; color: string; formula: BabyFormula | null; targets: Targets | null; targetsMode?: 'auto' | 'manual' };
+export type BabyReportData = { from: string; to: string; parentName: string; breastMilk: Macros; logs: BabyLog[]; babies: { id: string; name: string; color: string; birthDate: string; sex: string; targetsMode: 'auto' | 'manual'; targets: Targets | null; formula: BabyFormula | null }[] };
 export type BabyData = { babies: Baby[]; feedEvery: number; breastMilk: Macros; logs: BabyLog[]; myFoods: FoodItem[]; presetFoods: FoodItem[] };
 export type CarePlan = { profile: CareProfile; checkinBy: string; feedEvery?: number; tasks: { key: string; title: string; category: string; days: number }[]; focus: { title: string; tips: string[] }; quietNags: boolean };
 export type ProfileOption = { id: string; label: string; icon: string; desc?: string };
@@ -100,7 +101,7 @@ if (typeof window !== 'undefined' && typeof window.fetch === 'function' && !(win
 }
 
 // Must match the server version (server/server.js /api/health).
-export const APP_VERSION = '4.6';
+export const APP_VERSION = '4.7';
 
 async function call<T>(method: string, path: string, body?: unknown): Promise<T> {
   const res = await fetch(path, {
@@ -180,6 +181,7 @@ export const api = {
   addBabyLog: (id: string, body: Record<string, unknown>) => call<BabyLog>('POST', c(id, '/baby/logs'), body),
   updateBabyLog: (id: string, lid: string, body: Record<string, unknown>) => call('PATCH', c(id, `/baby/logs/${lid}`), body),
   deleteBabyLog: (id: string, lid: string) => call('DELETE', c(id, `/baby/logs/${lid}`)),
+  babyReport: (id: string, from: string, to: string) => call<BabyReportData>('GET', c(id, `/baby/report?from=${from}&to=${to}`)),
   addBaby: (id: string, body: { name: string; sex?: string; birthDate?: string }) => call<Baby>('POST', c(id, '/baby/babies'), body),
   removeBaby: (id: string, babyId: string) => call('DELETE', c(id, `/baby/babies/${babyId}`)),
   addFood: (id: string, body: Record<string, unknown>) => call<FoodItem>('POST', c(id, '/baby/foods'), body),

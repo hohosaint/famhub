@@ -1,11 +1,27 @@
-# Famhub web prototype (version 4.6)
+# Famhub web prototype (version 4.7)
 
 Famhub is the family eldercare coordination app.
 
 Open this folder in VS Code and follow "Famhub: Web Prototype Deployment Guide".
 No commands to type.
 
-## New in 4.6: version under the profile button
+## New in 4.7: infant reports and automatic nutrition targets
+
+- Babies tab > Reports: Day, Week, Month or Pick dates (tick boxes on a calendar; dots mark days with
+  entries). For each baby, or all babies: energy, protein, fat and carbs (totals, a day, per kg, and the
+  share of energy from each), milk (formula and breast milk), breastfeeds, pumping, solids, feeds and
+  the average gap, sleep, diapers, weight change, length and head; daily targets reached; charts of
+  energy (milk and food), macronutrients and milk per day; feeding times by hour; what was fed (each
+  milk and food with nutrients); and a day-by-day table with averages. Download CSV (opens in Excel) or
+  Print or save as PDF for the doctor.
+- Automatic daily targets (Baby settings > Daily targets > Automatic): energy from the National
+  Academies 2023 equation using age, length, weight and sex (Institute of Medicine 2005 equation when
+  the length or sex is missing); protein from the Dietary Reference Intakes per kg; fat and carbs from
+  the DRI shares for the age; milk (under 6 months) from energy / 67 kcal per 100 ml. They update by
+  themselves with each new weight or length. "Set my own" lets parents override any value.
+- Estimates are for healthy babies born at term; Famhub gives no feeding advice.
+
+## Added in 4.6: version under the profile button
 
 - Top right of every page: your profile picture with the version (for example v4.6) under it. It turns
   red when the page and the server differ. Tap it for your name and email, the page and server versions,

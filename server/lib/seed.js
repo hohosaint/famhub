@@ -138,17 +138,20 @@ function addDemoBabyCircle(state) {
     createdAt: now, demo: true, profile: { careFor: 'baby', stage: 'newborn', living: 'grandparents', needs: ['formula', 'premature'], relation: 'Twins', count: 2 },
     baby: { feedEvery: 3 },
     babies: [
-      { id: ethan, name: 'Ethan', sex: 'boy', birthDate: sgDay(-40), formulaId: 'similac-5mo-1', per100ml: null, customName: '', color: '#2563EB' },
-      { id: emma, name: 'Emma', sex: 'girl', birthDate: sgDay(-40), formulaId: 'similac-5mo-1', per100ml: null, customName: '', color: '#DB2777' },
+      { id: ethan, name: 'Ethan', sex: 'boy', birthDate: sgDay(-40), formulaId: 'similac-5mo-1', per100ml: null, customName: '', color: '#2563EB', targetsMode: 'auto' },
+      { id: emma, name: 'Emma', sex: 'girl', birthDate: sgDay(-40), formulaId: 'similac-5mo-1', per100ml: null, customName: '', color: '#DB2777', targetsMode: 'auto' },
     ],
   });
   const m = (userId, role) => state.members.push({ circleId: c, userId, role, joinedAt: now });
   m('demo-meiling', 'owner'); m('demo-thomas', 'family'); m('demo-weijie', 'family'); m('demo-siti', 'helper');
   const log = (babyId, daysAgo, h, min, kind, extra, by = 'demo-meiling') => state.babyLogs.push({ id: randomUUID(), circleId: c, babyId, kind, at: sgIso(-daysAgo, h, min), by, note: '', ...extra });
   const hourNow = Number(new Date(Date.now() + 8 * 3600e3).toISOString().slice(11, 13));
-  for (let d = 2; d >= 0; d--) {
-    for (const [h, ml] of [[1, 90], [4, 100], [7, 90], [10, 110], [13, 100], [16, 90], [19, 110], [22, 100]]) {
+  // Four weeks of feeds so the reports have something to show; amounts grow a little each week.
+  for (let d = 27; d >= 0; d--) {
+    const grow = Math.round((27 - d) / 7) * 10;
+    for (const [h, base] of [[1, 70], [4, 80], [7, 70], [10, 90], [13, 80], [16, 70], [19, 90], [22, 80]]) {
       if (d === 0 && h > hourNow - 1) continue;
+      const ml = base + grow + ((d * 7 + h) % 3) * 10;
       log(ethan, d, h, 10, 'bottle', { ml, source: 'formula' }, h % 2 ? 'demo-meiling' : 'demo-siti');
       log(emma, d, h, 25, 'bottle', { ml: ml - 20, source: h % 4 === 1 ? 'breastmilk' : 'formula' }, h % 2 ? 'demo-siti' : 'demo-meiling');
       log(ethan, d, h, 40, 'diaper', { diaper: h % 3 ? 'wet' : 'both' });
@@ -156,9 +159,13 @@ function addDemoBabyCircle(state) {
     }
     log(ethan, d, 13, 30, 'sleep', { endAt: sgIso(-d, 15, 0) });
     log(emma, d, 13, 45, 'sleep', { endAt: sgIso(-d, 15, 40) });
+    if (d > 0 || hourNow >= 10) { log(ethan, d, 7, 40, 'sleep', { endAt: sgIso(-d, 9, 50) }); log(emma, d, 7, 55, 'sleep', { endAt: sgIso(-d, 9, 40) }); }
+    if (d > 0) { log(ethan, d, 22, 40, 'sleep', { endAt: sgIso(-d + 1, 0, 55) }); log(emma, d, 22, 50, 'sleep', { endAt: sgIso(-d + 1, 0, 45) }); }
   }
   for (const [daysAgo, kg] of [[40, 2.6], [30, 3.0], [20, 3.4], [10, 3.8], [1, 4.1]]) log(ethan, daysAgo, 11, 0, 'weight', { kg });
   for (const [daysAgo, kg] of [[40, 2.3], [30, 2.6], [20, 2.9], [10, 3.3], [1, 3.6]]) log(emma, daysAgo, 11, 5, 'weight', { kg });
+  for (const [daysAgo, cm] of [[40, 47], [20, 50], [1, 53.5]]) log(ethan, daysAgo, 11, 2, 'height', { cm });
+  for (const [daysAgo, cm] of [[40, 46], [20, 48.5], [1, 52]]) log(emma, daysAgo, 11, 7, 'height', { cm });
   return c;
 }
 
