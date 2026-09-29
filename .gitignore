@@ -1,0 +1,9 @@
+# Never commit these
+node_modules/
+.expo/
+.env
+*.log
+
+# Local data: family records, uploaded photos, the session secret and push keys
+server/data/
+data/

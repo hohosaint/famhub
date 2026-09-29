@@ -1,0 +1,7 @@
+{
+  "recommendations": [
+    "ms-azuretools.vscode-azureappservice",
+    "ms-azuretools.vscode-azureresourcegroups",
+    "ms-ossdata.vscode-pgsql"
+  ]
+}

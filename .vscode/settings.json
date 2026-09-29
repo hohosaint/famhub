@@ -1,0 +1,5 @@
+{
+  "npm.enableScriptExplorer": true,
+  "appService.deploySubpath": "server",
+  "appService.zipIgnorePattern": ["node_modules{,/**}"]
+}

@@ -1,0 +1,22 @@
+{
+  "name": "famhub-server",
+  "version": "4.5.0",
+  "private": true,
+  "description": "Serves the Famhub web app and its API on Azure App Service",
+  "main": "server.js",
+  "scripts": {
+    "start": "node server.js"
+  },
+  "engines": {
+    "node": ">=22"
+  },
+  "dependencies": {
+    "express": "^5.2.1",
+    "pg": "^8.23.0",
+    "qrcode": "^1.5.4",
+    "web-push": "^3.6.7"
+  },
+  "optionalDependencies": {
+    "nodemailer": "10.0.10"
+  }
+}
